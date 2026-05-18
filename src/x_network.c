@@ -1,0 +1,871 @@
+#ifndef _WIN32
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+#endif
+
+#include <xlib/network.h>
+
+#include <errno.h>
+#include <limits.h>
+#include <stdlib.h>
+#include <string.h>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
+#endif
+
+struct x_socket {
+#ifdef _WIN32
+    SOCKET handle;
+#else
+    int handle;
+#endif
+    int type;
+    int family;
+};
+
+#ifdef _WIN32
+static int x_network_error_from_windows(int error)
+{
+    switch (error) {
+    case 0:                  return 0;
+    case WSAEWOULDBLOCK:     return EWOULDBLOCK;
+    case WSAEINPROGRESS:     return EINPROGRESS;
+    case WSAECONNRESET:      return ECONNRESET;
+    case WSAECONNREFUSED:    return ECONNREFUSED;
+    case WSAEADDRINUSE:      return EADDRINUSE;
+    case WSAEADDRNOTAVAIL:   return EADDRNOTAVAIL;
+    case WSAETIMEDOUT:       return ETIMEDOUT;
+    case WSAENOTSOCK:        return ENOTSOCK;
+    case WSAEINVAL:          return EINVAL;
+    case WSAENOBUFS:         return ENOBUFS;
+    case WSAEAFNOSUPPORT:    return EAFNOSUPPORT;
+    case WSAEPROTONOSUPPORT: return EPROTONOSUPPORT;
+    case WSAEACCES:          return EACCES;
+    case WSAHOST_NOT_FOUND:
+    case WSANO_DATA:         return ENOENT;
+    default:                 return EIO;
+    }
+}
+
+
+
+static INIT_ONCE x_network_init_once = INIT_ONCE_STATIC_INIT;
+static int       x_network_startup_result;
+
+static BOOL CALLBACK x_network_do_startup(PINIT_ONCE once, PVOID param, PVOID *ctx)
+{
+    WSADATA data;
+    (void)once; (void)param; (void)ctx;
+    x_network_startup_result = WSAStartup(MAKEWORD(2, 2), &data);
+    return x_network_startup_result == 0 ? TRUE : FALSE;
+}
+
+static int x_network_startup(void)
+{
+    if (!InitOnceExecuteOnce(&x_network_init_once, x_network_do_startup, NULL, NULL)) {
+        return x_network_startup_result != 0
+            ? x_network_error_from_windows((DWORD)x_network_startup_result)
+            : EIO;
+    }
+    return 0;
+}
+#else
+static int x_network_startup(void)
+{
+    return 0;
+}
+#endif
+
+static int x_socket_error(void)
+{
+#ifdef _WIN32
+    return x_network_error_from_windows(WSAGetLastError());
+#else
+    return errno;
+#endif
+}
+
+static int x_socket_copy_address(x_socket_address_t *address, const void *source, size_t length)
+{
+    if (address == NULL || source == NULL || length == 0U) {
+        return EINVAL;
+    }
+
+    if (length > sizeof(address->storage)) {
+        return EOVERFLOW;
+    }
+
+    memset(address->storage, 0, sizeof(address->storage));
+    memcpy(address->storage, source, length);
+    address->length = length;
+    return 0;
+}
+
+static int x_socket_create(x_socket_t **out_socket, int type, int family)
+{
+    x_socket_t *created;
+    int error;
+    int native_type;
+    int protocol;
+
+    if (out_socket == NULL || (type != X_SOCKET_TCP && type != X_SOCKET_UDP)) {
+        return EINVAL;
+    }
+
+    if (family != AF_INET && family != AF_INET6) {
+        return EINVAL;
+    }
+
+    *out_socket = NULL;
+
+    error = x_network_startup();
+    if (error != 0) {
+        return error;
+    }
+
+    created = (x_socket_t *)calloc(1, sizeof(*created));
+    if (created == NULL) {
+        return ENOMEM;
+    }
+
+    native_type = type == X_SOCKET_TCP ? SOCK_STREAM : SOCK_DGRAM;
+    protocol = type == X_SOCKET_TCP ? IPPROTO_TCP : IPPROTO_UDP;
+
+#ifdef _WIN32
+    created->handle = socket(family, native_type, protocol);
+    if (created->handle == INVALID_SOCKET) {
+        error = x_socket_error();
+        free(created);
+        return error;
+    }
+#else
+    /* Use SOCK_CLOEXEC where available so the fd is not inherited by child
+     * processes spawned via x_process_start(). */
+#if defined(SOCK_CLOEXEC)
+    created->handle = socket(family, native_type | SOCK_CLOEXEC, protocol);
+#else
+    created->handle = socket(family, native_type, protocol);
+#endif
+    if (created->handle < 0) {
+        error = errno;
+        free(created);
+        return error;
+    }
+#if !defined(SOCK_CLOEXEC)
+    (void)fcntl(created->handle, F_SETFD, FD_CLOEXEC);
+#endif
+#endif
+
+    created->type   = type;
+    created->family = family;
+    *out_socket = created;
+    return 0;
+}
+
+int x_address_resolve(
+    x_socket_address_t *address,
+    const char *host,
+    const char *service,
+    int type,
+    int passive)
+{
+    struct addrinfo hints;
+    struct addrinfo *results;
+    struct addrinfo *cursor;
+    int error;
+    int native_type;
+
+    if (address == NULL || service == NULL || (type != X_SOCKET_TCP && type != X_SOCKET_UDP)) {
+        return EINVAL;
+    }
+
+    error = x_network_startup();
+    if (error != 0) {
+        return error;
+    }
+
+    native_type = type == X_SOCKET_TCP ? SOCK_STREAM : SOCK_DGRAM;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family   = AF_UNSPEC;
+    hints.ai_socktype = native_type;
+    hints.ai_protocol = type == X_SOCKET_TCP ? IPPROTO_TCP : IPPROTO_UDP;
+    hints.ai_flags    = passive ? AI_PASSIVE : 0;
+
+    error = getaddrinfo(host, service, &hints, &results);
+    if (error != 0) {
+#ifdef _WIN32
+        return x_network_error_from_windows(error);
+#else
+        /* Map EAI_* codes to meaningful errno values. */
+        switch (error) {
+        case EAI_AGAIN:   return EAGAIN;
+#ifdef EAI_NONAME
+        case EAI_NONAME:
+#endif
+#ifdef EAI_SERVICE
+        case EAI_SERVICE:
+#endif
+            return ENOENT;
+        case EAI_SYSTEM:  return errno;
+        default:          return EINVAL;
+        }
+#endif
+    }
+
+    for (cursor = results; cursor != NULL; cursor = cursor->ai_next) {
+        error = x_socket_copy_address(address, cursor->ai_addr, (size_t)cursor->ai_addrlen);
+        if (error == 0) {
+            freeaddrinfo(results);
+            return 0;
+        }
+    }
+
+    freeaddrinfo(results);
+    return ENOENT;
+}
+
+int x_address_port(const x_socket_address_t *address, uint16_t *port)
+{
+    const struct sockaddr *sa;
+
+    if (address == NULL || port == NULL || address->length == 0U) {
+        return EINVAL;
+    }
+
+    sa = (const struct sockaddr *)address->storage;
+
+    if (sa->sa_family == AF_INET) {
+        if (address->length < sizeof(struct sockaddr_in)) {
+            return EINVAL;
+        }
+        *port = ntohs(((const struct sockaddr_in *)address->storage)->sin_port);
+        return 0;
+    }
+
+    if (sa->sa_family == AF_INET6) {
+        if (address->length < sizeof(struct sockaddr_in6)) {
+            return EINVAL;
+        }
+        *port = ntohs(((const struct sockaddr_in6 *)address->storage)->sin6_port);
+        return 0;
+    }
+
+    return EAFNOSUPPORT;
+}
+
+int x_socket_tcp(x_socket_t **socket)
+{
+    return x_socket_create(socket, X_SOCKET_TCP, AF_INET);
+}
+
+int x_socket_udp(x_socket_t **socket)
+{
+    return x_socket_create(socket, X_SOCKET_UDP, AF_INET);
+}
+
+int x_socket_tcp6(x_socket_t **socket)
+{
+    return x_socket_create(socket, X_SOCKET_TCP, AF_INET6);
+}
+
+int x_socket_udp6(x_socket_t **socket)
+{
+    return x_socket_create(socket, X_SOCKET_UDP, AF_INET6);
+}
+
+int x_socket_bind(x_socket_t *socket, const x_socket_address_t *address)
+{
+    if (socket == NULL || address == NULL || address->length == 0U) {
+        return EINVAL;
+    }
+
+    if (bind(socket->handle, (const struct sockaddr *)address->storage, (socklen_t)address->length) != 0) {
+        return x_socket_error();
+    }
+
+    return 0;
+}
+
+int x_socket_listen(x_socket_t *socket, int backlog)
+{
+    if (socket == NULL) {
+        return EINVAL;
+    }
+
+    if (listen(socket->handle, backlog) != 0) {
+        return x_socket_error();
+    }
+
+    return 0;
+}
+
+int x_socket_accept(x_socket_t *socket, x_socket_t **client)
+{
+    x_socket_t *accepted;
+#ifdef _WIN32
+    SOCKET handle;
+#else
+    int handle;
+#endif
+
+    if (socket == NULL || client == NULL) {
+        return EINVAL;
+    }
+
+    *client = NULL;
+    accepted = (x_socket_t *)calloc(1, sizeof(*accepted));
+    if (accepted == NULL) {
+        return ENOMEM;
+    }
+
+    handle = accept(socket->handle, NULL, NULL);
+#ifdef _WIN32
+    if (handle == INVALID_SOCKET) {
+        int error = x_socket_error();
+        free(accepted);
+        return error;
+    }
+#else
+    if (handle < 0) {
+        int error = errno;
+        free(accepted);
+        return error;
+    }
+    (void)fcntl(handle, F_SETFD, FD_CLOEXEC);
+#endif
+
+    accepted->handle = handle;
+    accepted->type = X_SOCKET_TCP;
+    *client = accepted;
+    return 0;
+}
+
+int x_socket_connect(x_socket_t *socket, const x_socket_address_t *address)
+{
+    if (socket == NULL || address == NULL || address->length == 0U) {
+        return EINVAL;
+    }
+
+    if (connect(socket->handle, (const struct sockaddr *)address->storage, (socklen_t)address->length) != 0) {
+        return x_socket_error();
+    }
+
+    return 0;
+}
+
+int x_socket_send(x_socket_t *socket, const void *buffer, size_t size, size_t *bytes_sent)
+{
+    int result;
+    size_t chunk;
+
+    if (socket == NULL || buffer == NULL) {
+        return EINVAL;
+    }
+
+    if (bytes_sent != NULL) {
+        *bytes_sent = 0U;
+    }
+
+    chunk = size > (size_t)INT_MAX ? (size_t)INT_MAX : size;
+    result = send(socket->handle, (const char *)buffer, (int)chunk, 0);
+    if (result < 0) {
+        return x_socket_error();
+    }
+
+    if (bytes_sent != NULL) {
+        *bytes_sent = (size_t)result;
+    }
+
+    return 0;
+}
+
+int x_socket_receive(x_socket_t *socket, void *buffer, size_t size, size_t *bytes_received)
+{
+    int result;
+    size_t chunk;
+
+    if (socket == NULL || buffer == NULL) {
+        return EINVAL;
+    }
+
+    if (bytes_received != NULL) {
+        *bytes_received = 0U;
+    }
+
+    chunk = size > (size_t)INT_MAX ? (size_t)INT_MAX : size;
+    result = recv(socket->handle, (char *)buffer, (int)chunk, 0);
+    if (result < 0) {
+        return x_socket_error();
+    }
+
+    if (bytes_received != NULL) {
+        *bytes_received = (size_t)result;
+    }
+
+    return 0;
+}
+
+int x_socket_send_to(
+    x_socket_t *socket,
+    const x_socket_address_t *address,
+    const void *buffer,
+    size_t size,
+    size_t *bytes_sent)
+{
+    int result;
+    size_t chunk;
+
+    if (socket == NULL || address == NULL || buffer == NULL || address->length == 0U) {
+        return EINVAL;
+    }
+
+    if (bytes_sent != NULL) {
+        *bytes_sent = 0U;
+    }
+
+    chunk = size > (size_t)INT_MAX ? (size_t)INT_MAX : size;
+    result = sendto(
+        socket->handle,
+        (const char *)buffer,
+        (int)chunk,
+        0,
+        (const struct sockaddr *)address->storage,
+        (socklen_t)address->length);
+    if (result < 0) {
+        return x_socket_error();
+    }
+
+    if (bytes_sent != NULL) {
+        *bytes_sent = (size_t)result;
+    }
+
+    return 0;
+}
+
+int x_socket_receive_from(
+    x_socket_t *socket,
+    x_socket_address_t *address,
+    void *buffer,
+    size_t size,
+    size_t *bytes_received)
+{
+    int result;
+    size_t chunk;
+    struct sockaddr_storage source;
+    socklen_t source_length = (socklen_t)sizeof(source);
+
+    if (socket == NULL || buffer == NULL) {
+        return EINVAL;
+    }
+
+    if (bytes_received != NULL) {
+        *bytes_received = 0U;
+    }
+
+    chunk = size > (size_t)INT_MAX ? (size_t)INT_MAX : size;
+    result = recvfrom(
+        socket->handle,
+        (char *)buffer,
+        (int)chunk,
+        0,
+        (struct sockaddr *)&source,
+        &source_length);
+    if (result < 0) {
+        return x_socket_error();
+    }
+
+    if (address != NULL) {
+        int error = x_socket_copy_address(address, &source, (size_t)source_length);
+        if (error != 0) {
+            return error;
+        }
+    }
+
+    if (bytes_received != NULL) {
+        *bytes_received = (size_t)result;
+    }
+
+    return 0;
+}
+
+int x_socket_local_address(x_socket_t *socket, x_socket_address_t *address)
+{
+    struct sockaddr_storage local;
+    socklen_t local_length = (socklen_t)sizeof(local);
+
+    if (socket == NULL || address == NULL) {
+        return EINVAL;
+    }
+
+    if (getsockname(socket->handle, (struct sockaddr *)&local, &local_length) != 0) {
+        return x_socket_error();
+    }
+
+    return x_socket_copy_address(address, &local, (size_t)local_length);
+}
+
+int x_socket_set_nonblocking(x_socket_t *socket, int enabled)
+{
+    if (socket == NULL) {
+        return EINVAL;
+    }
+
+#ifdef _WIN32
+    {
+        u_long mode = enabled ? 1UL : 0UL;
+        if (ioctlsocket(socket->handle, FIONBIO, &mode) != 0) {
+            return x_socket_error();
+        }
+    }
+#else
+    {
+        int flags = fcntl(socket->handle, F_GETFL, 0);
+        if (flags < 0) {
+            return errno;
+        }
+
+        if (enabled) {
+            flags |= O_NONBLOCK;
+        } else {
+            flags &= ~O_NONBLOCK;
+        }
+
+        if (fcntl(socket->handle, F_SETFL, flags) != 0) {
+            return errno;
+        }
+    }
+#endif
+
+    return 0;
+}
+
+int x_socket_set_reuse_address(x_socket_t *socket, int enabled)
+{
+    int value;
+
+    if (socket == NULL) {
+        return EINVAL;
+    }
+
+    value = enabled ? 1 : 0;
+    if (setsockopt(socket->handle, SOL_SOCKET, SO_REUSEADDR, (const char *)&value, (socklen_t)sizeof(value)) != 0) {
+        return x_socket_error();
+    }
+
+    return 0;
+}
+
+int x_socket_set_tcp_no_delay(x_socket_t *socket, int enabled)
+{
+    int value;
+
+    if (socket == NULL || socket->type != X_SOCKET_TCP) {
+        return EINVAL;
+    }
+
+    value = enabled ? 1 : 0;
+    if (setsockopt(socket->handle, IPPROTO_TCP, TCP_NODELAY, (const char *)&value, (socklen_t)sizeof(value)) != 0) {
+        return x_socket_error();
+    }
+
+    return 0;
+}
+
+uintptr_t x_socket_native_handle(x_socket_t *socket)
+{
+    if (socket == NULL) {
+        return 0U;
+    }
+
+    return (uintptr_t)socket->handle;
+}
+
+void x_socket_close(x_socket_t *socket)
+{
+    if (socket == NULL) {
+        return;
+    }
+
+#ifdef _WIN32
+    closesocket(socket->handle);
+#else
+    close(socket->handle);
+#endif
+
+    free(socket);
+}
+
+int x_address_family(const x_socket_address_t *address)
+{
+    const struct sockaddr *sa;
+
+    if (address == NULL || address->length == 0U) {
+        return EINVAL;
+    }
+
+    sa = (const struct sockaddr *)address->storage;
+
+    if (sa->sa_family == AF_INET) {
+        return X_ADDRESS_FAMILY_IPV4;
+    }
+
+    if (sa->sa_family == AF_INET6) {
+        return X_ADDRESS_FAMILY_IPV6;
+    }
+
+    return EAFNOSUPPORT;
+}
+
+int x_address_to_string(
+    const x_socket_address_t *address,
+    char *buffer,
+    size_t buffer_size)
+{
+    const struct sockaddr *sa;
+    const void *src;
+    int af;
+
+    if (address == NULL || buffer == NULL || buffer_size == 0U) {
+        return EINVAL;
+    }
+
+    sa = (const struct sockaddr *)address->storage;
+    af = sa->sa_family;
+
+    if (af == AF_INET) {
+        src = &((const struct sockaddr_in *)address->storage)->sin_addr;
+    } else if (af == AF_INET6) {
+        src = &((const struct sockaddr_in6 *)address->storage)->sin6_addr;
+    } else {
+        return EAFNOSUPPORT;
+    }
+
+#ifdef _WIN32
+    if (InetNtopA(af, (PVOID)src, buffer, buffer_size) == NULL) {
+        return x_socket_error();
+    }
+#else
+    if (inet_ntop(af, src, buffer, (socklen_t)buffer_size) == NULL) {
+        return errno;
+    }
+#endif
+
+    return 0;
+}
+
+int x_address_from_string(
+    x_socket_address_t *address,
+    const char *host,
+    uint16_t port,
+    int family)
+{
+    int af;
+
+    if (address == NULL || host == NULL) {
+        return EINVAL;
+    }
+
+    if (family == X_ADDRESS_FAMILY_IPV4) {
+        struct sockaddr_in sin;
+        af = AF_INET;
+        memset(&sin, 0, sizeof(sin));
+        sin.sin_family = AF_INET;
+        sin.sin_port   = htons(port);
+#ifdef _WIN32
+        if (InetPtonA(AF_INET, host, &sin.sin_addr) != 1) {
+            return x_socket_error();
+        }
+#else
+        if (inet_pton(AF_INET, host, &sin.sin_addr) != 1) {
+            return EINVAL;
+        }
+#endif
+        return x_socket_copy_address(address, &sin, sizeof(sin));
+    }
+
+    if (family == X_ADDRESS_FAMILY_IPV6) {
+        struct sockaddr_in6 sin6;
+        af = AF_INET6;
+        (void)af;
+        memset(&sin6, 0, sizeof(sin6));
+        sin6.sin6_family = AF_INET6;
+        sin6.sin6_port   = htons(port);
+#ifdef _WIN32
+        if (InetPtonA(AF_INET6, host, &sin6.sin6_addr) != 1) {
+            return x_socket_error();
+        }
+#else
+        if (inet_pton(AF_INET6, host, &sin6.sin6_addr) != 1) {
+            return EINVAL;
+        }
+#endif
+        return x_socket_copy_address(address, &sin6, sizeof(sin6));
+    }
+
+    return EINVAL;
+}
+
+static int x_socket_set_timeout(x_socket_t *socket, int optname, uint32_t milliseconds)
+{
+    if (socket == NULL) {
+        return EINVAL;
+    }
+
+#ifdef _WIN32
+    {
+        DWORD ms = (DWORD)milliseconds;
+        if (setsockopt(socket->handle, SOL_SOCKET, optname,
+                       (const char *)&ms, (socklen_t)sizeof(ms)) != 0) {
+            return x_socket_error();
+        }
+    }
+#else
+    {
+        struct timeval tv;
+        tv.tv_sec  = (time_t)(milliseconds / 1000U);
+        tv.tv_usec = (suseconds_t)((milliseconds % 1000U) * 1000U);
+        if (setsockopt(socket->handle, SOL_SOCKET, optname,
+                       &tv, (socklen_t)sizeof(tv)) != 0) {
+            return errno;
+        }
+    }
+#endif
+
+    return 0;
+}
+
+int x_socket_set_send_timeout(x_socket_t *socket, uint32_t milliseconds)
+{
+    return x_socket_set_timeout(socket, SO_SNDTIMEO, milliseconds);
+}
+
+int x_socket_set_receive_timeout(x_socket_t *socket, uint32_t milliseconds)
+{
+    return x_socket_set_timeout(socket, SO_RCVTIMEO, milliseconds);
+}
+
+static int x_socket_multicast_group(
+    x_socket_t *socket,
+    const char *group_address,
+    const char *interface_address,
+    int join)
+{
+    struct ip_mreq mreq;
+
+    if (socket == NULL || group_address == NULL) {
+        return EINVAL;
+    }
+
+    if (socket->type != X_SOCKET_UDP) {
+        return EINVAL;
+    }
+
+    memset(&mreq, 0, sizeof(mreq));
+
+#ifdef _WIN32
+    if (InetPtonA(AF_INET, group_address, &mreq.imr_multiaddr) != 1) {
+        return x_socket_error();
+    }
+    if (interface_address != NULL) {
+        if (InetPtonA(AF_INET, interface_address, &mreq.imr_interface) != 1) {
+            return x_socket_error();
+        }
+    } else {
+        mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+    }
+#else
+    if (inet_pton(AF_INET, group_address, &mreq.imr_multiaddr) != 1) {
+        return EINVAL;
+    }
+    if (interface_address != NULL) {
+        if (inet_pton(AF_INET, interface_address, &mreq.imr_interface) != 1) {
+            return EINVAL;
+        }
+    } else {
+        mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+    }
+#endif
+
+    if (setsockopt(
+            socket->handle,
+            IPPROTO_IP,
+            join ? IP_ADD_MEMBERSHIP : IP_DROP_MEMBERSHIP,
+            (const char *)&mreq,
+            (socklen_t)sizeof(mreq)) != 0) {
+        return x_socket_error();
+    }
+
+    return 0;
+}
+
+int x_socket_join_multicast_group(
+    x_socket_t *socket,
+    const char *group_address,
+    const char *interface_address)
+{
+    return x_socket_multicast_group(socket, group_address, interface_address, 1);
+}
+
+int x_socket_leave_multicast_group(
+    x_socket_t *socket,
+    const char *group_address,
+    const char *interface_address)
+{
+    return x_socket_multicast_group(socket, group_address, interface_address, 0);
+}
+
+int x_socket_udp_bound(
+    x_socket_t **socket,
+    const char *host,
+    const char *service)
+{
+    x_socket_t *created;
+    x_socket_address_t address;
+    int error;
+    int family;
+
+    if (socket == NULL || service == NULL) {
+        return EINVAL;
+    }
+
+    *socket = NULL;
+
+    error = x_address_resolve(&address, host, service, X_SOCKET_UDP, 1);
+    if (error != 0) {
+        return error;
+    }
+
+    family = x_address_family(&address);
+
+    error = x_socket_create(&created, X_SOCKET_UDP,
+                            family == X_ADDRESS_FAMILY_IPV6 ? AF_INET6 : AF_INET);
+    if (error != 0) {
+        return error;
+    }
+
+    error = x_socket_set_reuse_address(created, 1);
+    if (error != 0) {
+        x_socket_close(created);
+        return error;
+    }
+
+    error = x_socket_bind(created, &address);
+    if (error != 0) {
+        x_socket_close(created);
+        return error;
+    }
+
+    *socket = created;
+    return 0;
+}

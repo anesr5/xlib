@@ -1,0 +1,173 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  linux:
+    name: Linux ${{ matrix.compiler }} ${{ matrix.build_type }}${{ matrix.sanitizers == 'ON' && ' sanitizers' || '' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            cc: gcc
+            cxx: g++
+            build_type: Debug
+            sanitizers: OFF
+          - compiler: clang
+            cc: clang
+            cxx: clang++
+            build_type: Release
+            sanitizers: OFF
+          - compiler: clang
+            cc: clang
+            cxx: clang++
+            build_type: Debug
+            sanitizers: ON
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DXLIB_ENABLE_SANITIZERS=${{ matrix.sanitizers }}
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Event backend smoke
+        run: ctest --test-dir build -R xlib_event_example --output-on-failure
+
+      - name: Stress Test
+        run: ctest --test-dir build -R xlib_stress_test --output-on-failure
+
+      - name: Install
+        run: |
+          cmake -S . -B build-install -G Ninja -DXLIB_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install-prefix"
+          cmake --build build-install --parallel
+          cmake --install build-install
+
+      - name: Package consumer
+        run: |
+          cmake -S tests/package_consumer -B build-consumer -G Ninja -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install-prefix"
+          cmake --build build-consumer --parallel
+          ./build-consumer/xlib_package_consumer
+          ./build-consumer/xlib_package_consumer_cpp
+
+  macos:
+    name: macOS Clang
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        env:
+          CC: clang
+          CXX: clang++
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Event backend smoke
+        run: ctest --test-dir build -R xlib_event_example --output-on-failure
+
+      - name: Stress Test
+        run: ctest --test-dir build -R xlib_stress_test --output-on-failure
+
+      - name: Install and consume
+        run: |
+          cmake -S . -B build-install -G Ninja -DXLIB_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install-prefix"
+          cmake --build build-install --parallel
+          cmake --install build-install
+          cmake -S tests/package_consumer -B build-consumer -G Ninja -DCMAKE_PREFIX_PATH="${{ github.workspace }}/install-prefix"
+          cmake --build build-consumer --parallel
+          ./build-consumer/xlib_package_consumer
+          ./build-consumer/xlib_package_consumer_cpp
+
+  windows-msvc:
+    name: Windows MSVC
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Event backend smoke
+        run: ctest --test-dir build -C Release -R xlib_event_example --output-on-failure
+
+      - name: Install and consume
+        run: |
+          cmake -S . -B build-install -DXLIB_BUILD_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\install-prefix"
+          cmake --build build-install --config Release --parallel
+          cmake --install build-install --config Release
+          cmake -S tests/package_consumer -B build-consumer -DCMAKE_PREFIX_PATH="${{ github.workspace }}\install-prefix"
+          cmake --build build-consumer --config Release --parallel
+          .\build-consumer\Release\xlib_package_consumer.exe
+          .\build-consumer\Release\xlib_package_consumer_cpp.exe
+
+  windows-mingw:
+    name: Windows MinGW
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-gcc
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Event backend smoke
+        run: ctest --test-dir build -R xlib_event_example --output-on-failure
+
+      - name: Install and consume
+        run: |
+          cmake -S . -B build-install -G Ninja -DXLIB_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/install-prefix"
+          cmake --build build-install --parallel
+          cmake --install build-install
+          cmake -S tests/package_consumer -B build-consumer -G Ninja -DCMAKE_PREFIX_PATH="$PWD/install-prefix"
+          cmake --build build-consumer --parallel
+          ./build-consumer/xlib_package_consumer.exe
+          ./build-consumer/xlib_package_consumer_cpp.exe

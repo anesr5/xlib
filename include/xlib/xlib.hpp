@@ -846,6 +846,25 @@ public:
     directory_iterator(const directory_iterator &) = delete;
     directory_iterator &operator=(const directory_iterator &) = delete;
 
+    directory_iterator(directory_iterator &&other) noexcept
+        : directory_(other.directory_), current_(other.current_)
+    {
+        other.directory_ = nullptr;
+    }
+
+    directory_iterator &operator=(directory_iterator &&other) noexcept
+    {
+        if (this != &other) {
+            if (directory_ != nullptr) {
+                x_directory_close(directory_);
+            }
+            directory_ = other.directory_;
+            current_ = other.current_;
+            other.directory_ = nullptr;
+        }
+        return *this;
+    }
+
     ~directory_iterator()
     {
         if (directory_ != nullptr) {

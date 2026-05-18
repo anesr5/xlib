@@ -204,7 +204,7 @@ static int run_socket_and_timer_check(void)
     x_socket_set_reuse_address(state.server, 1);
     x_socket_set_nonblocking(state.server, 1);
 
-    if (x_address_resolve(&bind_address, "127.0.0.1", "0", X_SOCKET_TCP, 1) != 0
+    if (x_address_resolve(&bind_address, "127.0.0.1", "0", X_SOCKET_TCP, 0) != 0
         || x_socket_bind(state.server, &bind_address) != 0
         || x_socket_listen(state.server, 1) != 0
         || x_socket_local_address(state.server, &local_address) != 0

@@ -224,9 +224,6 @@ install(
     FILES
         readme.md
         LICENSE
-        CONTRIBUTING.md
-        VERSIONING.md
-        PACKAGING.md
     DESTINATION ${CMAKE_INSTALL_DOCDIR}
 )
 

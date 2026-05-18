@@ -663,7 +663,7 @@ int x_event_loop_create(x_event_loop_t **loop)
         return error;
     }
 
-    error = x_address_resolve(&bind_address, "127.0.0.1", "0", X_SOCKET_UDP, 1);
+    error = x_address_resolve(&bind_address, "127.0.0.1", "0", X_SOCKET_UDP, 0);
     if (error == 0) {
         error = x_socket_bind(created->wake_receiver, &bind_address);
     }

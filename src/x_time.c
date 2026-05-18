@@ -176,7 +176,7 @@ int x_timer_start(x_timer_t *timer)
 
 int x_timer_elapsed_ns(const x_timer_t *timer, uint64_t *nanoseconds)
 {
-    uint64_t now;
+    uint64_t now = 0U;
     int error;
 
     if (timer == NULL || nanoseconds == NULL) {

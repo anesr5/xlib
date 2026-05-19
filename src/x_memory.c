@@ -28,6 +28,7 @@
 struct x_mapped_file {
     void *data;
     size_t size;
+    int protection;
 
 #ifdef _WIN32
     HANDLE file;
@@ -255,6 +256,7 @@ int x_mapped_file_create(x_mapped_file_t **mapping, const char *path, size_t siz
     }
 
     created->size = size;
+    created->protection = X_MEMORY_PROTECT_READ | X_MEMORY_PROTECT_WRITE;
 
 #ifdef _WIN32
     {
@@ -408,6 +410,7 @@ int x_mapped_file_open(x_mapped_file_t **mapping, const char *path, int protecti
         }
 
         created->size = (size_t)file_size.QuadPart;
+        created->protection = protection;
 
         created->mapping = CreateFileMappingA(created->file, NULL, page, 0, 0, NULL);
         if (created->mapping == NULL) {
@@ -454,6 +457,7 @@ int x_mapped_file_open(x_mapped_file_t **mapping, const char *path, int protecti
         }
 
         created->size = (size_t)status.st_size;
+        created->protection = protection;
         created->data = mmap(NULL, created->size, prot, map_flags, created->fd, 0);
         if (created->data == MAP_FAILED) {
             error = errno;
@@ -465,6 +469,71 @@ int x_mapped_file_open(x_mapped_file_t **mapping, const char *path, int protecti
 #endif
 
     *mapping = created;
+    return 0;
+}
+
+int x_mapped_file_resize(x_mapped_file_t *mapping, size_t size)
+{
+    if (mapping == NULL || size == 0U) {
+        return EINVAL;
+    }
+
+#ifdef _WIN32
+    {
+        LARGE_INTEGER file_size;
+        DWORD page = (mapping->protection & X_MEMORY_PROTECT_WRITE) != 0 ? PAGE_READWRITE : PAGE_READONLY;
+        DWORD view = (mapping->protection & X_MEMORY_PROTECT_WRITE) != 0 ? FILE_MAP_ALL_ACCESS : FILE_MAP_READ;
+
+        if (size > (size_t)INT64_MAX) {
+            return EOVERFLOW;
+        }
+
+        if (mapping->data != NULL) {
+            UnmapViewOfFile(mapping->data);
+            mapping->data = NULL;
+        }
+        if (mapping->mapping != NULL) {
+            CloseHandle(mapping->mapping);
+            mapping->mapping = NULL;
+        }
+
+        file_size.QuadPart = (LONGLONG)size;
+        if (!SetFilePointerEx(mapping->file, file_size, NULL, FILE_BEGIN) || !SetEndOfFile(mapping->file)) {
+            return x_memory_error_from_windows(GetLastError());
+        }
+
+        mapping->mapping = CreateFileMappingA(mapping->file, NULL, page, 0, 0, NULL);
+        if (mapping->mapping == NULL) {
+            return x_memory_error_from_windows(GetLastError());
+        }
+
+        mapping->data = MapViewOfFile(mapping->mapping, view, 0, 0, size);
+        if (mapping->data == NULL) {
+            return x_memory_error_from_windows(GetLastError());
+        }
+    }
+#else
+    {
+        int prot = x_memory_posix_protection(mapping->protection);
+        int flags = (mapping->protection & X_MEMORY_PROTECT_WRITE) != 0 ? MAP_SHARED : MAP_PRIVATE;
+
+        if (mapping->data != NULL && mapping->data != MAP_FAILED) {
+            munmap(mapping->data, mapping->size);
+            mapping->data = NULL;
+        }
+
+        if (ftruncate(mapping->fd, (off_t)size) != 0) {
+            return errno;
+        }
+
+        mapping->data = mmap(NULL, size, prot, flags, mapping->fd, 0);
+        if (mapping->data == MAP_FAILED) {
+            return errno;
+        }
+    }
+#endif
+
+    mapping->size = size;
     return 0;
 }
 

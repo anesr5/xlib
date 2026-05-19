@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 
+#include <xlib/memory.h>
 #include <xlib/xlib_export.h>
 
 #ifdef __cplusplus
@@ -13,6 +14,7 @@ typedef struct x_shared_memory x_shared_memory_t;
 typedef struct x_named_semaphore x_named_semaphore_t;
 typedef struct x_named_mutex x_named_mutex_t;
 typedef struct x_message_queue x_message_queue_t;
+typedef struct x_named_pipe x_named_pipe_t;
 
 /*
  * Creates a named shared memory region of size bytes, replacing any existing
@@ -21,12 +23,14 @@ typedef struct x_message_queue x_message_queue_t;
  * Remove the name from the system with x_shared_memory_unlink.
  */
 XLIB_API int x_shared_memory_create(x_shared_memory_t **shm, const char *name, size_t size);
+XLIB_API int x_shared_memory_create_ex(x_shared_memory_t **shm, const char *name, size_t size, int protection);
 
 /*
  * Opens an existing named shared memory region for read-write access.
  * Close successful opens with x_shared_memory_close.
  */
 XLIB_API int x_shared_memory_open(x_shared_memory_t **shm, const char *name);
+XLIB_API int x_shared_memory_open_ex(x_shared_memory_t **shm, const char *name, int protection);
 
 XLIB_API void *x_shared_memory_data(x_shared_memory_t *shm);
 XLIB_API size_t x_shared_memory_size(const x_shared_memory_t *shm);
@@ -101,6 +105,14 @@ XLIB_API int x_message_queue_send(x_message_queue_t *queue, const void *data, si
 XLIB_API int x_message_queue_receive(x_message_queue_t *queue, void *buffer, size_t buffer_size, size_t *size);
 XLIB_API void x_message_queue_close(x_message_queue_t *queue);
 XLIB_API int x_message_queue_unlink(const char *name);
+
+/* Cross-platform named byte-stream pipe (Windows named pipe / POSIX FIFO). */
+XLIB_API int x_named_pipe_create(x_named_pipe_t **pipe, const char *name);
+XLIB_API int x_named_pipe_open(x_named_pipe_t **pipe, const char *name);
+XLIB_API int x_named_pipe_read(x_named_pipe_t *pipe, void *buffer, size_t size, size_t *bytes_read);
+XLIB_API int x_named_pipe_write(x_named_pipe_t *pipe, const void *buffer, size_t size, size_t *bytes_written);
+XLIB_API void x_named_pipe_close(x_named_pipe_t *pipe);
+XLIB_API int x_named_pipe_unlink(const char *name);
 
 #ifdef __cplusplus
 }

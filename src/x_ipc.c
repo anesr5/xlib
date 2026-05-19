@@ -26,6 +26,7 @@
 #include <semaphore.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 #endif
 
@@ -67,6 +68,14 @@ struct x_message_queue {
     x_named_mutex_t *mutex;
     x_named_semaphore_t *items;
     x_named_semaphore_t *slots;
+};
+
+struct x_named_pipe {
+#ifdef _WIN32
+    HANDLE handle;
+#else
+    int fd;
+#endif
 };
 
 #ifdef _WIN32
@@ -126,11 +135,22 @@ static int x_ipc_make_posix_name(const char *name, char *buffer, size_t buffer_s
 
 int x_shared_memory_create(x_shared_memory_t **shm, const char *name, size_t size)
 {
+    return x_shared_memory_create_ex(shm, name, size, X_MEMORY_PROTECT_READ | X_MEMORY_PROTECT_WRITE);
+}
+
+int x_shared_memory_create_ex(x_shared_memory_t **shm, const char *name, size_t size, int protection)
+{
     x_shared_memory_t *created;
+    int writable;
 
     if (shm == NULL || name == NULL || size == 0U) {
         return EINVAL;
     }
+
+    if ((protection & X_MEMORY_PROTECT_READ) == 0 || (protection & X_MEMORY_PROTECT_EXECUTE) != 0) {
+        return EINVAL;
+    }
+    writable = (protection & X_MEMORY_PROTECT_WRITE) != 0;
 
     *shm = NULL;
 
@@ -157,7 +177,7 @@ int x_shared_memory_create(x_shared_memory_t **shm, const char *name, size_t siz
         created->mapping = CreateFileMappingA(
             INVALID_HANDLE_VALUE,
             NULL,
-            PAGE_READWRITE,
+            writable ? PAGE_READWRITE : PAGE_READONLY,
             size_high,
             size_low,
             name);
@@ -168,7 +188,7 @@ int x_shared_memory_create(x_shared_memory_t **shm, const char *name, size_t siz
             return error;
         }
 
-        created->data = MapViewOfFile(created->mapping, FILE_MAP_ALL_ACCESS, 0, 0, 0);
+        created->data = MapViewOfFile(created->mapping, writable ? FILE_MAP_ALL_ACCESS : FILE_MAP_READ, 0, 0, 0);
         if (created->data == NULL) {
             int error = x_ipc_error_from_windows(GetLastError());
             CloseHandle(created->mapping);
@@ -201,7 +221,7 @@ int x_shared_memory_create(x_shared_memory_t **shm, const char *name, size_t siz
             return error;
         }
 
-        created->data = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        created->data = mmap(NULL, size, PROT_READ | (writable ? PROT_WRITE : 0), MAP_SHARED, fd, 0);
         close(fd);
 
         if (created->data == MAP_FAILED) {
@@ -219,11 +239,22 @@ int x_shared_memory_create(x_shared_memory_t **shm, const char *name, size_t siz
 
 int x_shared_memory_open(x_shared_memory_t **shm, const char *name)
 {
+    return x_shared_memory_open_ex(shm, name, X_MEMORY_PROTECT_READ | X_MEMORY_PROTECT_WRITE);
+}
+
+int x_shared_memory_open_ex(x_shared_memory_t **shm, const char *name, int protection)
+{
     x_shared_memory_t *created;
+    int writable;
 
     if (shm == NULL || name == NULL) {
         return EINVAL;
     }
+
+    if ((protection & X_MEMORY_PROTECT_READ) == 0 || (protection & X_MEMORY_PROTECT_EXECUTE) != 0) {
+        return EINVAL;
+    }
+    writable = (protection & X_MEMORY_PROTECT_WRITE) != 0;
 
     *shm = NULL;
 
@@ -236,14 +267,14 @@ int x_shared_memory_open(x_shared_memory_t **shm, const char *name)
     {
         MEMORY_BASIC_INFORMATION info;
 
-        created->mapping = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, name);
+        created->mapping = OpenFileMappingA(writable ? FILE_MAP_ALL_ACCESS : FILE_MAP_READ, FALSE, name);
         if (created->mapping == NULL) {
             int error = x_ipc_error_from_windows(GetLastError());
             free(created);
             return error;
         }
 
-        created->data = MapViewOfFile(created->mapping, FILE_MAP_ALL_ACCESS, 0, 0, 0);
+        created->data = MapViewOfFile(created->mapping, writable ? FILE_MAP_ALL_ACCESS : FILE_MAP_READ, 0, 0, 0);
         if (created->data == NULL) {
             int error = x_ipc_error_from_windows(GetLastError());
             CloseHandle(created->mapping);
@@ -271,7 +302,7 @@ int x_shared_memory_open(x_shared_memory_t **shm, const char *name)
             return error;
         }
 
-        fd = shm_open(posix_name, O_RDWR, 0);
+        fd = shm_open(posix_name, writable ? O_RDWR : O_RDONLY, 0);
         if (fd < 0) {
             error = errno;
             free(created);
@@ -292,7 +323,7 @@ int x_shared_memory_open(x_shared_memory_t **shm, const char *name)
         }
 
         created->size = (size_t)status.st_size;
-        created->data = mmap(NULL, created->size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        created->data = mmap(NULL, created->size, PROT_READ | (writable ? PROT_WRITE : 0), MAP_SHARED, fd, 0);
         close(fd);
 
         if (created->data == MAP_FAILED) {
@@ -1023,4 +1054,107 @@ int x_message_queue_unlink(const char *name)
     }
 
     return result;
+}
+
+static int x_named_pipe_system_name(const char *name, char *buffer, size_t buffer_size)
+{
+    int result;
+    if (name == NULL || buffer == NULL || buffer_size == 0U) return EINVAL;
+#ifdef _WIN32
+    if (strncmp(name, "\\\\.\\pipe\\", 9U) == 0) result = snprintf(buffer, buffer_size, "%s", name);
+    else result = snprintf(buffer, buffer_size, "\\\\.\\pipe\\%s", name);
+#else
+    result = snprintf(buffer, buffer_size, "%s", name);
+#endif
+    if (result < 0) return EIO;
+    return (size_t)result >= buffer_size ? ENAMETOOLONG : 0;
+}
+
+int x_named_pipe_create(x_named_pipe_t **pipe, const char *name)
+{
+    x_named_pipe_t *created; char system_name[256]; int error;
+    if (pipe == NULL || name == NULL) return EINVAL;
+    *pipe = NULL;
+    error = x_named_pipe_system_name(name, system_name, sizeof(system_name));
+    if (error != 0) return error;
+    created = (x_named_pipe_t *)calloc(1, sizeof(*created));
+    if (created == NULL) return ENOMEM;
+#ifdef _WIN32
+    created->handle = CreateNamedPipeA(system_name, PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, 4096, 4096, 0, NULL);
+    if (created->handle == INVALID_HANDLE_VALUE) { error = x_ipc_error_from_windows(GetLastError()); free(created); return error; }
+#else
+    if (mkfifo(system_name, 0600) != 0 && errno != EEXIST) { error = errno; free(created); return error; }
+    created->fd = open(system_name, O_RDWR | O_CLOEXEC);
+    if (created->fd < 0) { error = errno; free(created); return error; }
+#endif
+    *pipe = created; return 0;
+}
+
+int x_named_pipe_open(x_named_pipe_t **pipe, const char *name)
+{
+    x_named_pipe_t *opened; char system_name[256]; int error;
+    if (pipe == NULL || name == NULL) return EINVAL;
+    *pipe = NULL;
+    error = x_named_pipe_system_name(name, system_name, sizeof(system_name));
+    if (error != 0) return error;
+    opened = (x_named_pipe_t *)calloc(1, sizeof(*opened));
+    if (opened == NULL) return ENOMEM;
+#ifdef _WIN32
+    opened->handle = CreateFileA(system_name, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (opened->handle == INVALID_HANDLE_VALUE) { error = x_ipc_error_from_windows(GetLastError()); free(opened); return error; }
+#else
+    opened->fd = open(system_name, O_RDWR | O_CLOEXEC);
+    if (opened->fd < 0) { error = errno; free(opened); return error; }
+#endif
+    *pipe = opened; return 0;
+}
+
+int x_named_pipe_read(x_named_pipe_t *pipe, void *buffer, size_t size, size_t *bytes_read)
+{
+    if (pipe == NULL || buffer == NULL) return EINVAL;
+    if (bytes_read != NULL) *bytes_read = 0U;
+#ifdef _WIN32
+    { DWORD actual = 0; DWORD chunk = size > (size_t)0xffffffffUL ? 0xffffffffUL : (DWORD)size;
+      if (!ReadFile(pipe->handle, buffer, chunk, &actual, NULL)) return x_ipc_error_from_windows(GetLastError());
+      if (bytes_read != NULL) *bytes_read = (size_t)actual; }
+#else
+    { ssize_t actual = read(pipe->fd, buffer, size); if (actual < 0) return errno; if (bytes_read != NULL) *bytes_read = (size_t)actual; }
+#endif
+    return 0;
+}
+
+int x_named_pipe_write(x_named_pipe_t *pipe, const void *buffer, size_t size, size_t *bytes_written)
+{
+    if (pipe == NULL || buffer == NULL) return EINVAL;
+    if (bytes_written != NULL) *bytes_written = 0U;
+#ifdef _WIN32
+    { DWORD actual = 0; DWORD chunk = size > (size_t)0xffffffffUL ? 0xffffffffUL : (DWORD)size;
+      if (!WriteFile(pipe->handle, buffer, chunk, &actual, NULL)) return x_ipc_error_from_windows(GetLastError());
+      if (bytes_written != NULL) *bytes_written = (size_t)actual; }
+#else
+    { ssize_t actual = write(pipe->fd, buffer, size); if (actual < 0) return errno; if (bytes_written != NULL) *bytes_written = (size_t)actual; }
+#endif
+    return 0;
+}
+
+void x_named_pipe_close(x_named_pipe_t *pipe)
+{
+    if (pipe == NULL) return;
+#ifdef _WIN32
+    CloseHandle(pipe->handle);
+#else
+    if (pipe->fd >= 0) close(pipe->fd);
+#endif
+    free(pipe);
+}
+
+int x_named_pipe_unlink(const char *name)
+{
+#ifdef _WIN32
+    return name == NULL ? EINVAL : 0;
+#else
+    char system_name[256]; int error = x_named_pipe_system_name(name, system_name, sizeof(system_name));
+    if (error != 0) return error;
+    return unlink(system_name) == 0 || errno == ENOENT ? 0 : errno;
+#endif
 }

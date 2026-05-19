@@ -39,6 +39,7 @@ XLIB_API int x_mapped_file_create(x_mapped_file_t **mapping, const char *path, s
  * are supported; execute-only mappings are rejected.
  */
 XLIB_API int x_mapped_file_open(x_mapped_file_t **mapping, const char *path, int protection);
+XLIB_API int x_mapped_file_resize(x_mapped_file_t *mapping, size_t size);
 XLIB_API void *x_mapped_file_data(x_mapped_file_t *mapping);
 XLIB_API size_t x_mapped_file_size(const x_mapped_file_t *mapping);
 XLIB_API int x_mapped_file_flush(x_mapped_file_t *mapping);

@@ -27,7 +27,7 @@ static int shared_memory_example(void)
     memcpy(x_shared_memory_data(creator), message, strlen(message) + 1U);
     printf("  wrote: %s\n", (const char *)x_shared_memory_data(creator));
 
-    error = x_shared_memory_open(&opener, name);
+    error = x_shared_memory_open_ex(&opener, name, X_MEMORY_PROTECT_READ | X_MEMORY_PROTECT_WRITE);
     if (error != 0) {
         fprintf(stderr, "x_shared_memory_open failed: %d\n", error);
         x_shared_memory_close(creator);
@@ -294,6 +294,14 @@ static int mapped_file_open_example(void)
 
     memcpy(x_mapped_file_data(writer), payload, strlen(payload) + 1U);
     x_mapped_file_flush(writer);
+
+    error = x_mapped_file_resize(writer, 256);
+    if (error != 0 || x_mapped_file_size(writer) != 256U) {
+        fprintf(stderr, "x_mapped_file_resize failed: %d\n", error);
+        x_mapped_file_destroy(writer);
+        return 1;
+    }
+
     x_mapped_file_destroy(writer);
 
     printf("  opening read-only with x_mapped_file_open...\n");

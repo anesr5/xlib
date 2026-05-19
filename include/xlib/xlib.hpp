@@ -994,6 +994,11 @@ public:
         check(x_mapped_file_flush(mapping_), "x_mapped_file_flush");
     }
 
+    void resize(std::size_t new_size)
+    {
+        check(x_mapped_file_resize(mapping_, new_size), "x_mapped_file_resize");
+    }
+
     void destroy() noexcept
     {
         if (mapping_ != nullptr) {

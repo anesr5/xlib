@@ -35,7 +35,7 @@ Header: `xlib/memory.h`
 
 - `x_memory_page_size`
 - `x_virtual_memory_alloc`, `x_virtual_memory_protect`, `x_virtual_memory_free`
-- `x_mapped_file_create`, `x_mapped_file_data`, `x_mapped_file_size`, `x_mapped_file_flush`, `x_mapped_file_destroy`
+- `x_mapped_file_create`, `x_mapped_file_open`, `x_mapped_file_resize`, `x_mapped_file_data`, `x_mapped_file_size`, `x_mapped_file_flush`, `x_mapped_file_destroy`
 
 Protection flags:
 
@@ -139,10 +139,11 @@ Terminal helpers work with stream indexes `0`, `1`, and `2` for standard input, 
 
 Header: `xlib/ipc.h`
 
-- `x_shared_memory_create`, `x_shared_memory_open`, `x_shared_memory_data`, `x_shared_memory_size`, `x_shared_memory_close`, `x_shared_memory_unlink`
+- `x_shared_memory_create`, `x_shared_memory_create_ex`, `x_shared_memory_open`, `x_shared_memory_open_ex`, `x_shared_memory_data`, `x_shared_memory_size`, `x_shared_memory_close`, `x_shared_memory_unlink`
 - `x_named_semaphore_create`, `x_named_semaphore_open`, `x_named_semaphore_wait`, `x_named_semaphore_post`, `x_named_semaphore_close`, `x_named_semaphore_unlink`
 - `x_named_mutex_create`, `x_named_mutex_open`, `x_named_mutex_lock`, `x_named_mutex_unlock`, `x_named_mutex_close`, `x_named_mutex_unlink`
 - `x_message_queue_create`, `x_message_queue_open`, `x_message_queue_send`, `x_message_queue_receive`, `x_message_queue_close`, `x_message_queue_unlink`
+- `x_named_pipe_create`, `x_named_pipe_open`, `x_named_pipe_read`, `x_named_pipe_write`, `x_named_pipe_close`, `x_named_pipe_unlink`
 
 ## Allocator
 

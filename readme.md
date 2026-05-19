@@ -27,9 +27,12 @@ Current features include:
 - Read-only memory-mapped files
 - Mapped file open with configurable protection
 - Named shared memory regions
+- Shared memory with configurable protection flags
 - Named counting semaphores
 - Named cross-process mutexes
+- Named byte-stream pipes
 - Inter-process fixed-size message queues
+- Memory-mapped file resize API
 - Pluggable global allocator
 - Allocation dispatch helpers (`x_alloc`, `x_realloc`, `x_free`)
 - File I/O
@@ -296,10 +299,10 @@ int main(void) {
 
 - [x] Named shared memory segments
 - [x] Named mutexes and semaphores (cross-process synchronization)
-- [ ] Cross-platform UNIX domain / named pipe support
+- [x] Cross-platform UNIX domain / named pipe support
 - [x] Inter-process message queue primitives
-- [ ] Shared memory with configurable protection flags
-- [ ] Memory-mapped file resize API
+- [x] Shared memory with configurable protection flags
+- [x] Memory-mapped file resize API
 
 ### v2.4 - TLS and Secure Networking
 

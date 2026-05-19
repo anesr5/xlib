@@ -2,6 +2,7 @@
 #define XLIB_PROCESS_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include <xlib/xlib_export.h>
 
@@ -31,6 +32,7 @@ XLIB_API int x_process_start(
 XLIB_API int x_process_wait(x_process_t *process, int *exit_code);
 XLIB_API int x_process_poll(x_process_t *process, int *completed, int *exit_code);
 XLIB_API int x_process_terminate(x_process_t *process);
+XLIB_API uintptr_t x_process_native_handle(x_process_t *process);
 XLIB_API void x_process_destroy(x_process_t *process);
 
 XLIB_API int x_pipe_create(x_pipe_t **read_pipe, x_pipe_t **write_pipe);

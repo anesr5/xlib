@@ -67,6 +67,7 @@ XLIB_API int x_path_is_absolute(const char *path);
 
 XLIB_API int x_file_watcher_create(x_file_watcher_t **watcher, const char *path);
 XLIB_API int x_file_watcher_poll(x_file_watcher_t *watcher, x_file_watch_callback callback, void *user_data);
+XLIB_API const char *x_file_watcher_path(x_file_watcher_t *watcher);
 XLIB_API void x_file_watcher_destroy(x_file_watcher_t *watcher);
 
 XLIB_API int x_async_file_read_all(

@@ -51,7 +51,7 @@ Header: `xlib/filesystem.h`
 - `x_file_open`, `x_file_read`, `x_file_write`, `x_file_seek`, `x_file_size`, `x_file_close`, `x_file_remove`
 - `x_directory_create`, `x_directory_remove`, `x_directory_open`, `x_directory_next`, `x_directory_close`
 - `x_path_join`, `x_path_basename`, `x_path_is_absolute`
-- `x_file_watcher_create`, `x_file_watcher_poll`, `x_file_watcher_destroy`
+- `x_file_watcher_create`, `x_file_watcher_poll`, `x_file_watcher_path`, `x_file_watcher_destroy`
 - `x_async_file_read_all`, `x_async_file_read_wait`, `x_async_file_read_destroy`
 
 Windows paths are UTF-8 at the public API boundary and are converted internally to wide Win32 paths.
@@ -98,6 +98,7 @@ Header: `xlib/process.h`
 - `x_process_wait`
 - `x_process_poll`
 - `x_process_terminate`
+- `x_process_native_handle`
 - `x_process_destroy`
 - `x_pipe_create`, `x_pipe_read`, `x_pipe_write`, `x_pipe_set_nonblocking`, `x_pipe_poll`, `x_pipe_close`
 - `x_process_run_pipeline`

@@ -1054,6 +1054,15 @@ int x_file_watcher_poll(x_file_watcher_t *watcher, x_file_watch_callback callbac
     return 0;
 }
 
+const char *x_file_watcher_path(x_file_watcher_t *watcher)
+{
+    if (watcher == NULL) {
+        return NULL;
+    }
+
+    return watcher->path;
+}
+
 void x_file_watcher_destroy(x_file_watcher_t *watcher)
 {
     free(watcher);

@@ -817,6 +817,19 @@ int x_process_poll(x_process_t *process, int *completed, int *exit_code)
     return 0;
 }
 
+uintptr_t x_process_native_handle(x_process_t *process)
+{
+    if (process == NULL) {
+        return (uintptr_t)0;
+    }
+
+#ifdef _WIN32
+    return (uintptr_t)process->information.hProcess;
+#else
+    return (uintptr_t)process->pid;
+#endif
+}
+
 int x_process_terminate(x_process_t *process)
 {
     if (process == NULL) {

@@ -45,7 +45,7 @@ Signal sources are available on POSIX platforms through `x_event_loop_add_signal
 
 ## Backends
 
-- Linux uses `epoll`.
+- Linux uses `epoll`, with `pidfd_open` for process exits and `inotify` for filesystem watcher sources when available.
 - macOS and BSD platforms use `kqueue`.
 - Windows currently uses a `select`-based polling backend.
 
@@ -53,4 +53,4 @@ The CI workflow includes explicit `xlib_event_example` smoke runs on each suppor
 
 ## Current Scope
 
-v1.4 covers timer, socket, process, and snapshot-based file watcher sources. The process and file watcher sources are portable polling sources, while socket readiness uses the native backend where available.
+v2.2 covers timer, socket, process, file watcher, file I/O, pipe, and POSIX signal sources. Process and filesystem watcher sources use native non-polling backends where available and fall back to portable polling otherwise.

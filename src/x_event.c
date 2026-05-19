@@ -34,6 +34,10 @@
 #include <signal.h>
 #include <sys/select.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <sys/inotify.h>
+#include <sys/syscall.h>
+#endif
 #endif
 
 #ifndef _WIN32
@@ -69,6 +73,7 @@ struct x_event_source {
     int active;
     int internal;
     int events;
+    int native_event;
     uintptr_t native_handle;
     x_socket_t *socket;
     x_process_t *process;
@@ -78,6 +83,7 @@ struct x_event_source {
     int signal_number;
     uint64_t due_ns;
     uint64_t interval_ns;
+    int inotify_watch;
     x_event_callback callback;
     void *user_data;
 };
@@ -199,6 +205,36 @@ static void x_event_file_watch_callback(const char *path, int events, void *user
     *pending_events |= events;
 }
 
+#if defined(__linux__)
+static int x_event_pidfd_open(int pid)
+{
+#ifdef SYS_pidfd_open
+    return (int)syscall(SYS_pidfd_open, pid, 0);
+#else
+    (void)pid;
+    errno = ENOSYS;
+    return -1;
+#endif
+}
+
+static int x_event_inotify_flags(uint32_t mask)
+{
+    int events = X_EVENT_FILE;
+
+    if ((mask & (IN_CREATE | IN_MOVED_TO)) != 0) {
+        events |= X_EVENT_FILE_CREATED;
+    }
+    if ((mask & (IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE | IN_MOVE_SELF)) != 0) {
+        events |= X_EVENT_FILE_MODIFIED;
+    }
+    if ((mask & (IN_DELETE | IN_MOVED_FROM | IN_DELETE_SELF)) != 0) {
+        events |= X_EVENT_FILE_DELETED;
+    }
+
+    return events;
+}
+#endif
+
 #if defined(XLIB_EVENT_USE_EPOLL)
 static uint32_t x_event_epoll_flags(int events)
 {
@@ -304,7 +340,7 @@ static int x_event_loop_next_timeout_ms(x_event_loop_t *loop, int *has_timeout, 
 
     for (i = 0U; i < loop->count; ++i) {
         x_event_source_t *source = loop->sources[i];
-        if (!source->active
+        if (!source->active || source->native_event
             || (source->type != X_EVENT_SOURCE_TIMER
                 && source->type != X_EVENT_SOURCE_PROCESS
                 && source->type != X_EVENT_SOURCE_FILE_WATCHER
@@ -346,7 +382,7 @@ static int x_event_loop_dispatch_timers(x_event_loop_t *loop)
     for (i = 0U; i < loop->count; ++i) {
         x_event_source_t *source = loop->sources[i];
 
-        if (!source->active
+        if (!source->active || source->native_event
             || (source->type != X_EVENT_SOURCE_TIMER
                 && source->type != X_EVENT_SOURCE_PROCESS
                 && source->type != X_EVENT_SOURCE_FILE_WATCHER
@@ -506,6 +542,66 @@ static int x_event_loop_wake_callback(
     }
 }
 
+#if defined(XLIB_EVENT_USE_EPOLL) || defined(XLIB_EVENT_USE_KQUEUE)
+static int x_event_dispatch_native_source(x_event_source_t *source, int flags)
+{
+    if (source == NULL || !source->active) {
+        return 0;
+    }
+
+#if defined(__linux__)
+    if (source->type == X_EVENT_SOURCE_FILE_WATCHER) {
+        char buffer[4096];
+        int events = 0;
+        ssize_t bytes;
+
+        do {
+            bytes = read((int)source->native_handle, buffer, sizeof(buffer));
+            if (bytes > 0) {
+                ssize_t offset = 0;
+                while (offset + (ssize_t)sizeof(struct inotify_event) <= bytes) {
+                    const struct inotify_event *event = (const struct inotify_event *)(const void *)(buffer + offset);
+                    events |= x_event_inotify_flags(event->mask);
+                    offset += (ssize_t)sizeof(struct inotify_event) + (ssize_t)event->len;
+                }
+            }
+        } while (bytes > 0);
+
+        if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+            return errno;
+        }
+
+        if ((events & ~X_EVENT_FILE) != 0) {
+            return x_event_source_dispatch(source, events);
+        }
+        return 0;
+    }
+
+    if (source->type == X_EVENT_SOURCE_PROCESS) {
+        int completed = 0;
+        int error = x_process_poll(source->process, &completed, NULL);
+        if (error != 0) {
+            return error;
+        }
+        if (completed) {
+            error = x_event_source_dispatch(source, X_EVENT_PROCESS);
+            if (error != 0) {
+                return error;
+            }
+            if (source->active) {
+                x_event_source_remove(source);
+            }
+        }
+        return 0;
+    }
+#else
+    (void)flags;
+#endif
+
+    return x_event_source_dispatch(source, flags);
+}
+#endif
+
 #if defined(XLIB_EVENT_USE_EPOLL)
 static int x_event_loop_wait_sockets(x_event_loop_t *loop, int timeout_ms)
 {
@@ -531,7 +627,7 @@ static int x_event_loop_wait_sockets(x_event_loop_t *loop, int timeout_ms)
         }
 
         if (source != NULL && source->active && flags != 0) {
-            int error = x_event_source_dispatch(source, flags);
+            int error = x_event_dispatch_native_source(source, flags);
             if (error != 0) {
                 return error;
             }
@@ -571,7 +667,7 @@ static int x_event_loop_wait_sockets(x_event_loop_t *loop, int timeout_ms)
         }
 
         if (source != NULL && source->active && flags != 0) {
-            int error = x_event_source_dispatch(source, flags);
+            int error = x_event_dispatch_native_source(source, flags);
             if (error != 0) {
                 return error;
             }
@@ -864,9 +960,19 @@ void x_event_loop_destroy(x_event_loop_t *loop)
         x_event_source_t *source = loop->sources[i];
         /* Remove active socket sources from the backend before freeing so that
          * epoll/kqueue registrations are properly cleaned up. */
-        if (source->active && source->type == X_EVENT_SOURCE_SOCKET) {
+        if (source->active && (source->type == X_EVENT_SOURCE_SOCKET || source->native_event)) {
             x_event_backend_remove_socket(loop, source);
         }
+#if defined(__linux__)
+        if (source->native_event && source->type == X_EVENT_SOURCE_FILE_WATCHER && source->inotify_watch >= 0) {
+            inotify_rm_watch((int)source->native_handle, source->inotify_watch);
+        }
+#endif
+#ifndef _WIN32
+        if (source->native_event) {
+            close((int)source->native_handle);
+        }
+#endif
         free(source);
     }
 
@@ -1029,6 +1135,23 @@ int x_event_loop_add_process(
     created->callback = callback;
     created->user_data = user_data;
 
+#if defined(__linux__) && defined(XLIB_EVENT_USE_EPOLL)
+    {
+        int pidfd = x_event_pidfd_open((int)x_process_native_handle(process));
+        if (pidfd >= 0) {
+            created->native_event = 1;
+            created->native_handle = (uintptr_t)pidfd;
+            created->events = X_EVENT_READ;
+            if (x_event_backend_add_socket(loop, created) != 0) {
+                close(pidfd);
+                created->native_event = 0;
+                created->native_handle = 0;
+                created->events = X_EVENT_PROCESS;
+            }
+        }
+    }
+#endif
+
     loop->sources[loop->count++] = created;
     *source = created;
     return 0;
@@ -1076,6 +1199,34 @@ int x_event_loop_add_file_watcher(
     created->interval_ns = x_event_ms_to_ns(interval_ms == 0U ? 100U : interval_ms);
     created->callback = callback;
     created->user_data = user_data;
+
+#if defined(__linux__) && defined(XLIB_EVENT_USE_EPOLL)
+    {
+        const char *path = x_file_watcher_path(watcher);
+        int fd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+        if (fd >= 0) {
+            int watch = inotify_add_watch(
+                fd,
+                path,
+                IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE | IN_DELETE_SELF | IN_MOVE_SELF);
+            if (watch >= 0) {
+                created->native_event = 1;
+                created->native_handle = (uintptr_t)fd;
+                created->events = X_EVENT_READ;
+                created->inotify_watch = watch;
+                if (x_event_backend_add_socket(loop, created) != 0) {
+                    inotify_rm_watch(fd, watch);
+                    close(fd);
+                    created->native_event = 0;
+                    created->native_handle = 0;
+                    created->events = X_EVENT_FILE;
+                }
+            } else {
+                close(fd);
+            }
+        }
+    }
+#endif
 
     loop->sources[loop->count++] = created;
     *source = created;
@@ -1275,9 +1426,22 @@ void x_event_source_remove(x_event_source_t *source)
         return;
     }
 
-    if (source->type == X_EVENT_SOURCE_SOCKET) {
+    if (source->type == X_EVENT_SOURCE_SOCKET || source->native_event) {
         x_event_backend_remove_socket(source->loop, source);
     }
+#if defined(__linux__)
+    if (source->native_event && source->type == X_EVENT_SOURCE_FILE_WATCHER && source->inotify_watch >= 0) {
+        inotify_rm_watch((int)source->native_handle, source->inotify_watch);
+        source->inotify_watch = -1;
+    }
+#endif
+#ifndef _WIN32
+    if (source->native_event) {
+        close((int)source->native_handle);
+        source->native_event = 0;
+        source->native_handle = 0;
+    }
+#endif
 
     source->active = 0;
 }

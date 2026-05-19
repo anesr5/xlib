@@ -283,8 +283,8 @@ int main(void) {
 ### v2.2 - Async I/O Foundation
 
 - [x] Non-blocking file read/write event sources for the event loop
-- [ ] Native non-polling process exit backends where available
-- [ ] Native filesystem change watcher backends where available
+- [x] Native non-polling process exit backends where available
+- [x] Native filesystem change watcher backends where available
 - [x] Signal event sources on POSIX (`signalfd` / `kqueue EVFILT_SIGNAL`)
 - [x] Pipe read/write event sources
 - [x] Child process stdout/stderr streaming via event loop

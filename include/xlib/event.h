@@ -6,6 +6,7 @@
 #include <xlib/filesystem.h>
 #include <xlib/network.h>
 #include <xlib/process.h>
+#include <xlib/tls.h>
 #include <xlib/xlib_export.h>
 
 #ifdef __cplusplus
@@ -24,7 +25,8 @@ typedef enum x_event_flags {
     X_EVENT_FILE_CREATED = 32,
     X_EVENT_FILE_MODIFIED = 64,
     X_EVENT_FILE_DELETED = 128,
-    X_EVENT_SIGNAL = 256
+    X_EVENT_SIGNAL = 256,
+    X_EVENT_TLS = 512
 } x_event_flags_t;
 
 typedef enum x_event_source_type {
@@ -35,7 +37,8 @@ typedef enum x_event_source_type {
     X_EVENT_SOURCE_FILE_WATCHER = 4,
     X_EVENT_SOURCE_PIPE = 5,
     X_EVENT_SOURCE_SIGNAL = 6,
-    X_EVENT_SOURCE_FILE_IO = 7
+    X_EVENT_SOURCE_FILE_IO = 7,
+    X_EVENT_SOURCE_TLS_HANDSHAKE = 8
 } x_event_source_type_t;
 
 typedef int (*x_event_callback)(
@@ -105,6 +108,14 @@ XLIB_API int x_event_loop_add_signal(
     x_event_loop_t *loop,
     x_event_source_t **source,
     int signal_number,
+    uint64_t interval_ms,
+    x_event_callback callback,
+    void *user_data);
+
+XLIB_API int x_event_loop_add_tls_handshake(
+    x_event_loop_t *loop,
+    x_event_source_t **source,
+    x_tls_stream_t *stream,
     uint64_t interval_ms,
     x_event_callback callback,
     void *user_data);

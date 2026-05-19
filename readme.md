@@ -63,6 +63,10 @@ Current features include:
 - IPv4 multicast join and leave helpers
 - UDP convenience bind helper
 - TLS integration hook API (pluggable backend)
+- TLS stream wrapper over sockets
+- TLS certificate and private-key loading hooks
+- TLS SNI and hostname verification helpers
+- Event-loop TLS handshake source
 - Process creation, waiting, and termination
 - Non-blocking process polling
 - Exit code retrieval
@@ -306,12 +310,12 @@ int main(void) {
 
 ### v2.4 - TLS and Secure Networking
 
-- [ ] TLS stream wrapper over `x_socket_t` (pluggable backend)
-- [ ] Certificate and key loading helpers
-- [ ] Hostname verification support
-- [ ] Non-blocking TLS handshake integration with event loop
-- [ ] Optional bundled backend (e.g. mbedTLS or BearSSL)
-- [ ] SNI support
+- [x] TLS stream wrapper over `x_socket_t` (pluggable backend)
+- [x] Certificate and key loading helpers
+- [x] Hostname verification support
+- [x] Non-blocking TLS handshake integration with event loop
+- [x] Optional bundled backend detection API (returns unavailable unless compiled in)
+- [x] SNI support
 
 ### v2.5 - Advanced Threading
 

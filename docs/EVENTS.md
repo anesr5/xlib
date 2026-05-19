@@ -15,6 +15,7 @@ Supported source types:
 - File read/write readiness through `x_event_loop_add_file`
 - Pipe readiness through `x_event_loop_add_pipe`
 - POSIX signals through `x_event_loop_add_signal`
+- TLS handshake completion through `x_event_loop_add_tls_handshake`
 - Internal wake notifications used by `x_event_loop_wake` and `x_event_loop_cancel`
 
 ## Wake and Cancel
@@ -42,6 +43,8 @@ File I/O sources dispatch read/write readiness for regular files through `x_even
 Pipe sources put the pipe into non-blocking mode, poll `x_pipe_poll` on the requested interval, and dispatch `X_EVENT_READ` and/or `X_EVENT_WRITE`. This supports event-loop streaming of child stdout/stderr pipes created through `x_process_options_t`.
 
 Signal sources are available on POSIX platforms through `x_event_loop_add_signal`; they install a minimal signal handler and dispatch `X_EVENT_SIGNAL` from the event loop. On Windows this API returns `ENOSYS`.
+
+TLS handshake sources call `x_tls_stream_handshake` on the requested interval and dispatch `X_EVENT_TLS` when the backend reports completion; `EAGAIN`/`EWOULDBLOCK` keeps the source pending.
 
 ## Backends
 

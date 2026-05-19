@@ -158,9 +158,13 @@ Permits overriding the internal memory allocations of xlib by providing a custom
 
 Header: `xlib/tls.h`
 
-- `x_tls_context_create`, `x_tls_connect`, `x_tls_accept`, `x_tls_read`, `x_tls_write`, `x_tls_close`, `x_tls_context_destroy`
+- `x_tls_context_create`, `x_tls_connect`, `x_tls_accept`, `x_tls_read`, `x_tls_write`, `x_tls_handshake`, `x_tls_close`, `x_tls_context_destroy`
+- `x_tls_context_load_certificate_file`, `x_tls_context_load_private_key_file`
+- `x_tls_context_set_server_name`, `x_tls_context_set_verify_hostname`, `x_tls_hostname_matches`
+- `x_tls_stream_create`, `x_tls_stream_connect`, `x_tls_stream_accept`, `x_tls_stream_handshake`, `x_tls_stream_read`, `x_tls_stream_write`, `x_tls_stream_close`, `x_tls_stream_destroy`
+- `x_tls_builtin_backend_available`, `x_tls_context_create_builtin`
 
-xlib doesn't ship a TLS implementation, but provides an abstraction to easily plug in backend hooks via `x_tls_hooks_t`.
+xlib provides a TLS stream wrapper and pluggable backend hooks. The built-in backend entry points report availability and return `ENOSYS` when no optional backend is compiled in.
 
 ## Diagnostics
 

@@ -171,6 +171,11 @@ if(XLIB_BUILD_EXAMPLES)
 
     add_test(NAME xlib_diagnostics_example COMMAND xlib_diagnostics_example)
 
+    add_executable(xlib_tls_example examples/tls_example.c)
+    target_link_libraries(xlib_tls_example PRIVATE xlib::xlib)
+
+    add_test(NAME xlib_tls_example COMMAND xlib_tls_example)
+
     add_executable(xlib_stress_test examples/stress_test.c)
     target_link_libraries(xlib_stress_test PRIVATE xlib::xlib)
     

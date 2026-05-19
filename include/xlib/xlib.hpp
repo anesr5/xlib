@@ -1416,6 +1416,24 @@ public:
         return source;
     }
 
+    x_event_source_t *add_tls_handshake(
+        x_tls_stream_t *stream,
+        std::chrono::milliseconds interval,
+        x_event_callback callback,
+        void *user_data = nullptr)
+    {
+        x_event_source_t *source = nullptr;
+        check(x_event_loop_add_tls_handshake(
+            loop_,
+            &source,
+            stream,
+            static_cast<std::uint64_t>(interval.count()),
+            callback,
+            user_data),
+            "x_event_loop_add_tls_handshake");
+        return source;
+    }
+
     x_event_loop_t *native_handle() noexcept
     {
         return loop_;

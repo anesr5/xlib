@@ -80,6 +80,7 @@ struct x_event_source {
     x_file_watcher_t *watcher;
     x_file_t *file;
     x_pipe_t *pipe;
+    x_tls_stream_t *tls_stream;
     int signal_number;
     uint64_t due_ns;
     uint64_t interval_ns;
@@ -346,7 +347,8 @@ static int x_event_loop_next_timeout_ms(x_event_loop_t *loop, int *has_timeout, 
                 && source->type != X_EVENT_SOURCE_FILE_WATCHER
                 && source->type != X_EVENT_SOURCE_PIPE
                 && source->type != X_EVENT_SOURCE_SIGNAL
-                && source->type != X_EVENT_SOURCE_FILE_IO)) {
+                && source->type != X_EVENT_SOURCE_FILE_IO
+                && source->type != X_EVENT_SOURCE_TLS_HANDSHAKE)) {
             continue;
         }
 
@@ -388,7 +390,8 @@ static int x_event_loop_dispatch_timers(x_event_loop_t *loop)
                 && source->type != X_EVENT_SOURCE_FILE_WATCHER
                 && source->type != X_EVENT_SOURCE_PIPE
                 && source->type != X_EVENT_SOURCE_SIGNAL
-                && source->type != X_EVENT_SOURCE_FILE_IO)
+                && source->type != X_EVENT_SOURCE_FILE_IO
+                && source->type != X_EVENT_SOURCE_TLS_HANDSHAKE)
             || source->due_ns > now) {
             continue;
         }
@@ -411,6 +414,25 @@ static int x_event_loop_dispatch_timers(x_event_loop_t *loop)
                 return error;
             }
 
+            if (source->active) {
+                x_event_source_remove(source);
+            }
+            continue;
+        }
+
+        if (source->type == X_EVENT_SOURCE_TLS_HANDSHAKE) {
+            error = x_tls_stream_handshake(source->tls_stream);
+            if (error == EAGAIN || error == EWOULDBLOCK) {
+                source->due_ns = now + source->interval_ns;
+                continue;
+            }
+            if (error != 0) {
+                return error;
+            }
+            error = x_event_source_dispatch(source, X_EVENT_TLS);
+            if (error != 0) {
+                return error;
+            }
             if (source->active) {
                 x_event_source_remove(source);
             }
@@ -1409,6 +1431,54 @@ int x_event_loop_add_signal(
     *source = created;
     return 0;
 #endif
+}
+
+int x_event_loop_add_tls_handshake(
+    x_event_loop_t *loop,
+    x_event_source_t **source,
+    x_tls_stream_t *stream,
+    uint64_t interval_ms,
+    x_event_callback callback,
+    void *user_data)
+{
+    x_event_source_t *created;
+    uint64_t now;
+    int error;
+
+    if (loop == NULL || source == NULL || stream == NULL || callback == NULL) {
+        return EINVAL;
+    }
+
+    *source = NULL;
+
+    error = x_event_loop_reserve(loop, loop->count + 1U);
+    if (error != 0) {
+        return error;
+    }
+
+    error = x_time_monotonic_ns(&now);
+    if (error != 0) {
+        return error;
+    }
+
+    created = (x_event_source_t *)calloc(1, sizeof(*created));
+    if (created == NULL) {
+        return ENOMEM;
+    }
+
+    created->loop = loop;
+    created->type = X_EVENT_SOURCE_TLS_HANDSHAKE;
+    created->active = 1;
+    created->events = X_EVENT_TLS;
+    created->tls_stream = stream;
+    created->due_ns = now;
+    created->interval_ns = x_event_ms_to_ns(interval_ms == 0U ? 10U : interval_ms);
+    created->callback = callback;
+    created->user_data = user_data;
+
+    loop->sources[loop->count++] = created;
+    *source = created;
+    return 0;
 }
 
 int x_event_source_type(const x_event_source_t *source)

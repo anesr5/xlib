@@ -11,6 +11,12 @@ extern "C" {
 #endif
 
 typedef struct x_tls_context x_tls_context_t;
+typedef struct x_tls_stream x_tls_stream_t;
+
+typedef enum x_tls_mode {
+    X_TLS_MODE_CLIENT = 1,
+    X_TLS_MODE_SERVER = 2
+} x_tls_mode_t;
 
 /*
  * Pluggable TLS hooks vtable.  xlib does not ship a TLS implementation; it
@@ -51,6 +57,17 @@ typedef struct x_tls_hooks {
                  size_t *bytes_written, void *user_data);
 
     /*
+     * Optional non-blocking handshake step. Return 0 when complete,
+     * EAGAIN/EWOULDBLOCK while pending, or another errno-style error.
+     */
+    int (*handshake)(x_tls_context_t *ctx, void *user_data);
+
+    int (*load_certificate_file)(x_tls_context_t *ctx, const char *path, void *user_data);
+    int (*load_private_key_file)(x_tls_context_t *ctx, const char *path, void *user_data);
+    int (*set_server_name)(x_tls_context_t *ctx, const char *server_name, void *user_data);
+    int (*set_verify_hostname)(x_tls_context_t *ctx, int enabled, void *user_data);
+
+    /*
      * Perform a graceful TLS shutdown and release any backend state.
      * The underlying socket is NOT closed by this call.
      */
@@ -78,6 +95,23 @@ XLIB_API int x_tls_accept(x_tls_context_t *ctx, x_socket_t *socket);
 
 XLIB_API int x_tls_read(x_tls_context_t *ctx, void *buffer, size_t size, size_t *bytes_read);
 XLIB_API int x_tls_write(x_tls_context_t *ctx, const void *buffer, size_t size, size_t *bytes_written);
+XLIB_API int x_tls_handshake(x_tls_context_t *ctx);
+XLIB_API int x_tls_context_load_certificate_file(x_tls_context_t *ctx, const char *path);
+XLIB_API int x_tls_context_load_private_key_file(x_tls_context_t *ctx, const char *path);
+XLIB_API int x_tls_context_set_server_name(x_tls_context_t *ctx, const char *server_name);
+XLIB_API int x_tls_context_set_verify_hostname(x_tls_context_t *ctx, int enabled);
+XLIB_API int x_tls_hostname_matches(const char *pattern, const char *hostname);
+XLIB_API int x_tls_builtin_backend_available(void);
+XLIB_API int x_tls_context_create_builtin(x_tls_context_t **ctx);
+
+XLIB_API int x_tls_stream_create(x_tls_stream_t **stream, x_tls_context_t *ctx, x_socket_t *socket, int mode);
+XLIB_API int x_tls_stream_connect(x_tls_stream_t *stream, const char *hostname);
+XLIB_API int x_tls_stream_accept(x_tls_stream_t *stream);
+XLIB_API int x_tls_stream_handshake(x_tls_stream_t *stream);
+XLIB_API int x_tls_stream_read(x_tls_stream_t *stream, void *buffer, size_t size, size_t *bytes_read);
+XLIB_API int x_tls_stream_write(x_tls_stream_t *stream, const void *buffer, size_t size, size_t *bytes_written);
+XLIB_API void x_tls_stream_close(x_tls_stream_t *stream);
+XLIB_API void x_tls_stream_destroy(x_tls_stream_t *stream);
 
 /*
  * Performs a graceful TLS shutdown.  Does not close the underlying socket.

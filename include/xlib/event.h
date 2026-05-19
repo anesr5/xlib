@@ -26,6 +26,14 @@ typedef enum x_event_flags {
     X_EVENT_FILE_DELETED = 128
 } x_event_flags_t;
 
+typedef enum x_event_source_type {
+    X_EVENT_SOURCE_UNKNOWN = 0,
+    X_EVENT_SOURCE_SOCKET = 1,
+    X_EVENT_SOURCE_TIMER = 2,
+    X_EVENT_SOURCE_PROCESS = 3,
+    X_EVENT_SOURCE_FILE_WATCHER = 4
+} x_event_source_type_t;
+
 typedef int (*x_event_callback)(
     x_event_loop_t *loop,
     x_event_source_t *source,
@@ -71,6 +79,7 @@ XLIB_API int x_event_loop_add_file_watcher(
     x_event_callback callback,
     void *user_data);
 
+XLIB_API int x_event_source_type(const x_event_source_t *source);
 XLIB_API void x_event_source_remove(x_event_source_t *source);
 
 #ifdef __cplusplus

@@ -40,13 +40,6 @@
 #define XLIB_EVENT_USE_KQUEUE 1
 #endif
 
-enum x_event_source_type {
-    X_EVENT_SOURCE_SOCKET = 1,
-    X_EVENT_SOURCE_TIMER = 2,
-    X_EVENT_SOURCE_PROCESS = 3,
-    X_EVENT_SOURCE_FILE = 4
-};
-
 struct x_event_source {
     x_event_loop_t *loop;
     int type;
@@ -288,7 +281,7 @@ static int x_event_loop_next_timeout_ms(x_event_loop_t *loop, int *has_timeout, 
         if (!source->active
             || (source->type != X_EVENT_SOURCE_TIMER
                 && source->type != X_EVENT_SOURCE_PROCESS
-                && source->type != X_EVENT_SOURCE_FILE)) {
+                && source->type != X_EVENT_SOURCE_FILE_WATCHER)) {
             continue;
         }
 
@@ -327,7 +320,7 @@ static int x_event_loop_dispatch_timers(x_event_loop_t *loop)
         if (!source->active
             || (source->type != X_EVENT_SOURCE_TIMER
                 && source->type != X_EVENT_SOURCE_PROCESS
-                && source->type != X_EVENT_SOURCE_FILE)
+                && source->type != X_EVENT_SOURCE_FILE_WATCHER)
             || source->due_ns > now) {
             continue;
         }
@@ -356,7 +349,7 @@ static int x_event_loop_dispatch_timers(x_event_loop_t *loop)
             continue;
         }
 
-        if (source->type == X_EVENT_SOURCE_FILE) {
+        if (source->type == X_EVENT_SOURCE_FILE_WATCHER) {
             int pending_events = 0;
 
             error = x_file_watcher_poll(source->watcher, x_event_file_watch_callback, &pending_events);
@@ -991,7 +984,7 @@ int x_event_loop_add_file_watcher(
     }
 
     created->loop = loop;
-    created->type = X_EVENT_SOURCE_FILE;
+    created->type = X_EVENT_SOURCE_FILE_WATCHER;
     created->active = 1;
     created->events = X_EVENT_FILE;
     created->watcher = watcher;
@@ -1003,6 +996,15 @@ int x_event_loop_add_file_watcher(
     loop->sources[loop->count++] = created;
     *source = created;
     return 0;
+}
+
+int x_event_source_type(const x_event_source_t *source)
+{
+    if (source == NULL || !source->active) {
+        return X_EVENT_SOURCE_UNKNOWN;
+    }
+
+    return source->type;
 }
 
 void x_event_source_remove(x_event_source_t *source)

@@ -151,7 +151,8 @@ static int run_cancel_check(void)
         return 1;
     }
 
-    if (x_event_loop_add_timer(loop, &source, 5000U, 0U, never_timer_callback, NULL) != 0) {
+    if (x_event_loop_add_timer(loop, &source, 5000U, 0U, never_timer_callback, NULL) != 0
+        || x_event_source_type(source) != X_EVENT_SOURCE_TIMER) {
         x_event_loop_destroy(loop);
         return 1;
     }
@@ -183,7 +184,10 @@ static int run_socket_and_timer_check(void)
 {
     struct event_state state;
     x_event_loop_t *loop;
-    x_event_source_t *source;
+    x_event_source_t *server_source;
+    x_event_source_t *client_source;
+    x_event_source_t *timer_source;
+    x_event_source_t *repeat_source;
     x_socket_address_t bind_address;
     x_socket_address_t local_address;
     uint16_t port;
@@ -226,10 +230,14 @@ static int run_socket_and_timer_check(void)
         return 1;
     }
 
-    if (x_event_loop_add_socket(loop, &source, state.server, X_EVENT_READ, server_callback, &state) != 0
-        || x_event_loop_add_socket(loop, &source, state.client, X_EVENT_READ, client_callback, &state) != 0
-        || x_event_loop_add_timer(loop, &source, 1U, 0U, timer_callback, &state) != 0
-        || x_event_loop_add_timer(loop, &source, 1U, 5U, repeat_timer_callback, &state) != 0) {
+    if (x_event_loop_add_socket(loop, &server_source, state.server, X_EVENT_READ, server_callback, &state) != 0
+        || x_event_loop_add_socket(loop, &client_source, state.client, X_EVENT_READ, client_callback, &state) != 0
+        || x_event_loop_add_timer(loop, &timer_source, 1U, 0U, timer_callback, &state) != 0
+        || x_event_loop_add_timer(loop, &repeat_source, 1U, 5U, repeat_timer_callback, &state) != 0
+        || x_event_source_type(server_source) != X_EVENT_SOURCE_SOCKET
+        || x_event_source_type(client_source) != X_EVENT_SOURCE_SOCKET
+        || x_event_source_type(timer_source) != X_EVENT_SOURCE_TIMER
+        || x_event_source_type(repeat_source) != X_EVENT_SOURCE_TIMER) {
         x_socket_close(state.client);
         x_socket_close(state.server);
         x_event_loop_destroy(loop);

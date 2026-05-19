@@ -4,7 +4,7 @@ xlib's event system provides a small source-based event loop for timers, socket 
 
 ## Event Sources
 
-Event sources are represented by opaque `x_event_source_t` handles. A source can remove itself from inside its callback with `x_event_source_remove`.
+Event sources are represented by opaque `x_event_source_t` handles. A source can remove itself from inside its callback with `x_event_source_remove`. Call `x_event_source_type` to inspect the source subtype in generic dispatch code.
 
 Supported source types:
 

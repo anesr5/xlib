@@ -1240,6 +1240,11 @@ private:
 
 // ---- event_loop ------------------------------------------------------------
 
+[[nodiscard]] inline x_event_source_type_t source_type(const x_event_source_t *source) noexcept
+{
+    return static_cast<x_event_source_type_t>(x_event_source_type(source));
+}
+
 class event_loop {
 public:
     event_loop()

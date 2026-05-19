@@ -71,6 +71,7 @@ Current features include:
 - Socket readiness events
 - Process exit events
 - File change events
+- Event source subtype introspection
 - Event-loop wake and cancellation APIs
 - Repeating timer drift correction
 - Linux `epoll`, macOS/BSD `kqueue`, and Windows polling backends
@@ -283,7 +284,7 @@ int main(void) {
 - [ ] Signal event sources on POSIX (`signalfd` / `kqueue EVFILT_SIGNAL`)
 - [ ] Pipe read/write event sources
 - [ ] Child process stdout/stderr streaming via event loop
-- [ ] Unified `x_event_source` subtype for all new sources
+- [x] Unified `x_event_source` subtype for all new sources
 
 ### v2.3 - IPC and Shared Memory
 

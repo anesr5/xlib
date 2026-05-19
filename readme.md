@@ -2,7 +2,7 @@
 
 **xlib** is a lightweight MIT-licensed cross-platform low-level systems library for C and C++.
 
-Current version: `2.1.0`
+Current version: `2.5.0`
 
 It provides a small portable abstraction layer over operating system APIs, allowing developers to write low-level code once and compile it across Linux, Windows, and macOS.
 

@@ -106,6 +106,117 @@ static int named_semaphore_example(void)
     return 0;
 }
 
+/* --- Named mutex example -------------------------------------------------- */
+
+static int named_mutex_example(void)
+{
+    x_named_mutex_t *first = NULL;
+    x_named_mutex_t *second = NULL;
+    const char *name = "xlib_ipc_example_mutex";
+    int error;
+
+    printf("Creating named mutex '%s'...\n", name);
+
+    error = x_named_mutex_create(&first, name);
+    if (error != 0) {
+        x_named_mutex_unlink(name);
+        error = x_named_mutex_create(&first, name);
+        if (error != 0) {
+            fprintf(stderr, "x_named_mutex_create failed: %d\n", error);
+            return 1;
+        }
+    }
+
+    error = x_named_mutex_open(&second, name);
+    if (error != 0) {
+        fprintf(stderr, "x_named_mutex_open failed: %d\n", error);
+        x_named_mutex_close(first);
+        x_named_mutex_unlink(name);
+        return 1;
+    }
+
+    error = x_named_mutex_lock(first);
+    if (error != 0) {
+        fprintf(stderr, "x_named_mutex_lock failed: %d\n", error);
+        x_named_mutex_close(second);
+        x_named_mutex_close(first);
+        x_named_mutex_unlink(name);
+        return 1;
+    }
+
+    error = x_named_mutex_unlock(first);
+    if (error != 0 || x_named_mutex_lock(second) != 0 || x_named_mutex_unlock(second) != 0) {
+        fprintf(stderr, "x_named_mutex lock/unlock failed\n");
+        x_named_mutex_close(second);
+        x_named_mutex_close(first);
+        x_named_mutex_unlink(name);
+        return 1;
+    }
+
+    x_named_mutex_close(second);
+    x_named_mutex_close(first);
+    x_named_mutex_unlink(name);
+
+    printf("  named mutex OK\n\n");
+    return 0;
+}
+
+/* --- Message queue example ------------------------------------------------ */
+
+static int message_queue_example(void)
+{
+    x_message_queue_t *producer = NULL;
+    x_message_queue_t *consumer = NULL;
+    const char *name = "xlib_ipc_example_queue";
+    const char *message = "queued message";
+    char buffer[64];
+    size_t size = 0U;
+    int error;
+
+    printf("Creating message queue '%s'...\n", name);
+
+    x_message_queue_unlink(name);
+    error = x_message_queue_create(&producer, name, 4U, 32U);
+    if (error != 0) {
+        fprintf(stderr, "x_message_queue_create failed: %d\n", error);
+        return 1;
+    }
+
+    error = x_message_queue_open(&consumer, name);
+    if (error != 0) {
+        fprintf(stderr, "x_message_queue_open failed: %d\n", error);
+        x_message_queue_close(producer);
+        x_message_queue_unlink(name);
+        return 1;
+    }
+
+    error = x_message_queue_send(producer, message, strlen(message) + 1U);
+    if (error != 0) {
+        fprintf(stderr, "x_message_queue_send failed: %d\n", error);
+        x_message_queue_close(consumer);
+        x_message_queue_close(producer);
+        x_message_queue_unlink(name);
+        return 1;
+    }
+
+    memset(buffer, 0, sizeof(buffer));
+    error = x_message_queue_receive(consumer, buffer, sizeof(buffer), &size);
+    if (error != 0 || size != strlen(message) + 1U || strcmp(buffer, message) != 0) {
+        fprintf(stderr, "x_message_queue_receive failed: %d\n", error);
+        x_message_queue_close(consumer);
+        x_message_queue_close(producer);
+        x_message_queue_unlink(name);
+        return 1;
+    }
+
+    x_message_queue_close(consumer);
+    x_message_queue_close(producer);
+    x_message_queue_unlink(name);
+
+    printf("  message queue OK\n\n");
+    return 0;
+}
+
 /* --- Pluggable allocator example ------------------------------------------ */
 
 static unsigned int custom_alloc_calls;
@@ -208,6 +319,8 @@ int main(void)
 
     result |= shared_memory_example();
     result |= named_semaphore_example();
+    result |= named_mutex_example();
+    result |= message_queue_example();
     result |= allocator_example();
     result |= mapped_file_open_example();
 

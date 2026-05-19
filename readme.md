@@ -28,6 +28,8 @@ Current features include:
 - Mapped file open with configurable protection
 - Named shared memory regions
 - Named counting semaphores
+- Named cross-process mutexes
+- Inter-process fixed-size message queues
 - Pluggable global allocator
 - Allocation dispatch helpers (`x_alloc`, `x_realloc`, `x_free`)
 - File I/O
@@ -292,10 +294,10 @@ int main(void) {
 
 ### v2.3 - IPC and Shared Memory
 
-- [ ] Named shared memory segments
-- [ ] Named mutexes and semaphores (cross-process synchronization)
+- [x] Named shared memory segments
+- [x] Named mutexes and semaphores (cross-process synchronization)
 - [ ] Cross-platform UNIX domain / named pipe support
-- [ ] Inter-process message queue primitives
+- [x] Inter-process message queue primitives
 - [ ] Shared memory with configurable protection flags
 - [ ] Memory-mapped file resize API
 

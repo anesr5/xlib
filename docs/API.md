@@ -141,6 +141,8 @@ Header: `xlib/ipc.h`
 
 - `x_shared_memory_create`, `x_shared_memory_open`, `x_shared_memory_data`, `x_shared_memory_size`, `x_shared_memory_close`, `x_shared_memory_unlink`
 - `x_named_semaphore_create`, `x_named_semaphore_open`, `x_named_semaphore_wait`, `x_named_semaphore_post`, `x_named_semaphore_close`, `x_named_semaphore_unlink`
+- `x_named_mutex_create`, `x_named_mutex_open`, `x_named_mutex_lock`, `x_named_mutex_unlock`, `x_named_mutex_close`, `x_named_mutex_unlink`
+- `x_message_queue_create`, `x_message_queue_open`, `x_message_queue_send`, `x_message_queue_receive`, `x_message_queue_close`, `x_message_queue_unlink`
 
 ## Allocator
 

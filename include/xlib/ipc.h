@@ -11,6 +11,8 @@ extern "C" {
 
 typedef struct x_shared_memory x_shared_memory_t;
 typedef struct x_named_semaphore x_named_semaphore_t;
+typedef struct x_named_mutex x_named_mutex_t;
+typedef struct x_message_queue x_message_queue_t;
 
 /*
  * Creates a named shared memory region of size bytes, replacing any existing
@@ -71,6 +73,34 @@ XLIB_API void x_named_semaphore_close(x_named_semaphore_t *semaphore);
  * continue to function until closed.
  */
 XLIB_API int x_named_semaphore_unlink(const char *name);
+
+/*
+ * Creates or opens a named cross-process mutex.  Close successful creations
+ * with x_named_mutex_close.  Remove the name from the system with
+ * x_named_mutex_unlink where supported/required by the platform.
+ */
+XLIB_API int x_named_mutex_create(x_named_mutex_t **mutex, const char *name);
+XLIB_API int x_named_mutex_open(x_named_mutex_t **mutex, const char *name);
+XLIB_API int x_named_mutex_lock(x_named_mutex_t *mutex);
+XLIB_API int x_named_mutex_unlock(x_named_mutex_t *mutex);
+XLIB_API void x_named_mutex_close(x_named_mutex_t *mutex);
+XLIB_API int x_named_mutex_unlink(const char *name);
+
+/*
+ * Fixed-size inter-process message queue built on xlib shared memory and
+ * named synchronization primitives. Messages larger than message_size are
+ * rejected with EMSGSIZE. Receives report the copied byte count.
+ */
+XLIB_API int x_message_queue_create(
+    x_message_queue_t **queue,
+    const char *name,
+    size_t capacity,
+    size_t message_size);
+XLIB_API int x_message_queue_open(x_message_queue_t **queue, const char *name);
+XLIB_API int x_message_queue_send(x_message_queue_t *queue, const void *data, size_t size);
+XLIB_API int x_message_queue_receive(x_message_queue_t *queue, void *buffer, size_t buffer_size, size_t *size);
+XLIB_API void x_message_queue_close(x_message_queue_t *queue);
+XLIB_API int x_message_queue_unlink(const char *name);
 
 #ifdef __cplusplus
 }

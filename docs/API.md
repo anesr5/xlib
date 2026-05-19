@@ -13,12 +13,17 @@ All public symbols are exported using the `XLIB_API` macro to ensure correct vis
 
 Header: `xlib/thread.h`
 
-- `x_thread_create`, `x_thread_join`, `x_thread_destroy`
+- `x_thread_create`, `x_thread_create_with_options`, `x_thread_join`, `x_thread_destroy`
+- `x_thread_set_affinity`, `x_thread_current_set_affinity`
 - `x_thread_sleep_ms`
 - `x_mutex_create`, `x_recursive_mutex_create`, `x_mutex_lock`, `x_mutex_try_lock`, `x_mutex_unlock`, `x_mutex_destroy`
 - `x_condition_create`, `x_condition_wait`, `x_condition_signal`, `x_condition_broadcast`, `x_condition_destroy`
 - `x_semaphore_create`, `x_semaphore_wait`, `x_semaphore_post`, `x_semaphore_destroy`
 - `x_tls_key_create`, `x_tls_set`, `x_tls_get`, `x_tls_key_destroy`
+- `x_rwlock_create`, `x_rwlock_read_lock`, `x_rwlock_try_read_lock`, `x_rwlock_read_unlock`, `x_rwlock_write_lock`, `x_rwlock_try_write_lock`, `x_rwlock_write_unlock`, `x_rwlock_destroy`
+- `x_barrier_create`, `x_barrier_wait`, `x_barrier_destroy`
+- `x_once`
+- `x_thread_pool_create`, `x_thread_pool_submit`, `x_thread_pool_destroy`
 
 ## Time
 

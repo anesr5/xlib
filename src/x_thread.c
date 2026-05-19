@@ -17,10 +17,17 @@
 #include <limits.h>
 #include <stdlib.h>
 
+#ifndef ENOSYS
+#define ENOSYS ENOTSUP
+#endif
+
 #ifdef _WIN32
 #include <windows.h>
 #else
 #include <pthread.h>
+#ifdef __linux__
+#include <sched.h>
+#endif
 #endif
 
 struct x_thread {
@@ -73,6 +80,48 @@ struct x_tls_key {
     DWORD handle;
 #else
     pthread_key_t handle;
+#endif
+};
+
+struct x_rwlock {
+#ifdef _WIN32
+    SRWLOCK handle;
+#else
+    pthread_rwlock_t handle;
+#endif
+};
+
+struct x_barrier {
+    unsigned int count;
+    unsigned int waiting;
+    unsigned int generation;
+#ifdef _WIN32
+    CRITICAL_SECTION mutex;
+    CONDITION_VARIABLE condition;
+#else
+    pthread_mutex_t mutex;
+    pthread_cond_t condition;
+#endif
+};
+
+struct x_thread_pool_task {
+    x_thread_pool_task_fn function;
+    void *data;
+    struct x_thread_pool_task *next;
+};
+
+struct x_thread_pool {
+    x_thread_t **workers;
+    unsigned int worker_count;
+    struct x_thread_pool_task *head;
+    struct x_thread_pool_task *tail;
+    int stopping;
+#ifdef _WIN32
+    CRITICAL_SECTION mutex;
+    CONDITION_VARIABLE condition;
+#else
+    pthread_mutex_t mutex;
+    pthread_cond_t condition;
 #endif
 };
 
@@ -166,6 +215,15 @@ static int x_mutex_create_with_type(x_mutex_t **mutex, int recursive)
 
 int x_thread_create(x_thread_t **thread, x_thread_fn function, void *data)
 {
+    return x_thread_create_with_options(thread, function, data, NULL);
+}
+
+int x_thread_create_with_options(
+    x_thread_t **thread,
+    x_thread_fn function,
+    void *data,
+    const x_thread_options_t *options)
+{
     x_thread_t *created;
 
     if (thread == NULL || function == NULL) {
@@ -185,7 +243,7 @@ int x_thread_create(x_thread_t **thread, x_thread_fn function, void *data)
 #ifdef _WIN32
     created->handle = CreateThread(
         NULL,
-        0,
+        options != NULL ? options->stack_size : 0,
         x_thread_entry,
         created,
         0,
@@ -198,7 +256,27 @@ int x_thread_create(x_thread_t **thread, x_thread_fn function, void *data)
     }
 #else
     {
-        int error = pthread_create(&created->handle, NULL, x_thread_entry, created);
+        pthread_attr_t attr;
+        pthread_attr_t *attr_ptr = NULL;
+        int error = 0;
+        if (options != NULL && options->stack_size != 0U) {
+            error = pthread_attr_init(&attr);
+            if (error != 0) {
+                free(created);
+                return error;
+            }
+            attr_ptr = &attr;
+            error = pthread_attr_setstacksize(&attr, options->stack_size);
+            if (error != 0) {
+                pthread_attr_destroy(&attr);
+                free(created);
+                return error;
+            }
+        }
+        error = pthread_create(&created->handle, attr_ptr, x_thread_entry, created);
+        if (attr_ptr != NULL) {
+            pthread_attr_destroy(attr_ptr);
+        }
         if (error != 0) {
             free(created);
             return error;
@@ -642,4 +720,294 @@ void x_tls_key_destroy(x_tls_key_t *key)
 #endif
 
     free(key);
+}
+
+int x_thread_set_affinity(x_thread_t *thread, unsigned int cpu_index)
+{
+    if (thread == NULL) {
+        return EINVAL;
+    }
+#ifdef _WIN32
+    return SetThreadAffinityMask(thread->handle, ((DWORD_PTR)1) << cpu_index) != 0 ? 0 : EINVAL;
+#elif defined(__linux__)
+    {
+        cpu_set_t set;
+        CPU_ZERO(&set);
+        CPU_SET(cpu_index, &set);
+        return pthread_setaffinity_np(thread->handle, sizeof(set), &set);
+    }
+#else
+    (void)cpu_index;
+    return ENOSYS;
+#endif
+}
+
+int x_thread_current_set_affinity(unsigned int cpu_index)
+{
+#ifdef _WIN32
+    return SetThreadAffinityMask(GetCurrentThread(), ((DWORD_PTR)1) << cpu_index) != 0 ? 0 : EINVAL;
+#elif defined(__linux__)
+    {
+        cpu_set_t set;
+        CPU_ZERO(&set);
+        CPU_SET(cpu_index, &set);
+        return pthread_setaffinity_np(pthread_self(), sizeof(set), &set);
+    }
+#else
+    (void)cpu_index;
+    return ENOSYS;
+#endif
+}
+
+int x_rwlock_create(x_rwlock_t **lock)
+{
+    x_rwlock_t *created;
+    if (lock == NULL) return EINVAL;
+    *lock = NULL;
+    created = (x_rwlock_t *)calloc(1, sizeof(*created));
+    if (created == NULL) return ENOMEM;
+#ifdef _WIN32
+    InitializeSRWLock(&created->handle);
+#else
+    { int error = pthread_rwlock_init(&created->handle, NULL); if (error != 0) { free(created); return error; } }
+#endif
+    *lock = created;
+    return 0;
+}
+
+int x_rwlock_read_lock(x_rwlock_t *lock)
+{
+    if (lock == NULL) return EINVAL;
+#ifdef _WIN32
+    AcquireSRWLockShared(&lock->handle); return 0;
+#else
+    return pthread_rwlock_rdlock(&lock->handle);
+#endif
+}
+
+int x_rwlock_try_read_lock(x_rwlock_t *lock)
+{
+    if (lock == NULL) return EINVAL;
+#ifdef _WIN32
+    return TryAcquireSRWLockShared(&lock->handle) ? 0 : EBUSY;
+#else
+    return pthread_rwlock_tryrdlock(&lock->handle);
+#endif
+}
+
+int x_rwlock_read_unlock(x_rwlock_t *lock)
+{
+    if (lock == NULL) return EINVAL;
+#ifdef _WIN32
+    ReleaseSRWLockShared(&lock->handle); return 0;
+#else
+    return pthread_rwlock_unlock(&lock->handle);
+#endif
+}
+
+int x_rwlock_write_lock(x_rwlock_t *lock)
+{
+    if (lock == NULL) return EINVAL;
+#ifdef _WIN32
+    AcquireSRWLockExclusive(&lock->handle); return 0;
+#else
+    return pthread_rwlock_wrlock(&lock->handle);
+#endif
+}
+
+int x_rwlock_try_write_lock(x_rwlock_t *lock)
+{
+    if (lock == NULL) return EINVAL;
+#ifdef _WIN32
+    return TryAcquireSRWLockExclusive(&lock->handle) ? 0 : EBUSY;
+#else
+    return pthread_rwlock_trywrlock(&lock->handle);
+#endif
+}
+
+int x_rwlock_write_unlock(x_rwlock_t *lock)
+{
+    if (lock == NULL) return EINVAL;
+#ifdef _WIN32
+    ReleaseSRWLockExclusive(&lock->handle); return 0;
+#else
+    return pthread_rwlock_unlock(&lock->handle);
+#endif
+}
+
+void x_rwlock_destroy(x_rwlock_t *lock)
+{
+    if (lock == NULL) return;
+#ifndef _WIN32
+    pthread_rwlock_destroy(&lock->handle);
+#endif
+    free(lock);
+}
+
+int x_barrier_create(x_barrier_t **barrier, unsigned int count)
+{
+    x_barrier_t *created;
+    if (barrier == NULL || count == 0U) return EINVAL;
+    *barrier = NULL;
+    created = (x_barrier_t *)calloc(1, sizeof(*created));
+    if (created == NULL) return ENOMEM;
+    created->count = count;
+#ifdef _WIN32
+    InitializeCriticalSection(&created->mutex);
+    InitializeConditionVariable(&created->condition);
+#else
+    { int error = pthread_mutex_init(&created->mutex, NULL); if (error != 0) { free(created); return error; }
+      error = pthread_cond_init(&created->condition, NULL); if (error != 0) { pthread_mutex_destroy(&created->mutex); free(created); return error; } }
+#endif
+    *barrier = created;
+    return 0;
+}
+
+int x_barrier_wait(x_barrier_t *barrier)
+{
+    unsigned int generation;
+    if (barrier == NULL) return EINVAL;
+#ifdef _WIN32
+    EnterCriticalSection(&barrier->mutex);
+    generation = barrier->generation;
+    ++barrier->waiting;
+    if (barrier->waiting == barrier->count) {
+        barrier->waiting = 0U; ++barrier->generation; WakeAllConditionVariable(&barrier->condition); LeaveCriticalSection(&barrier->mutex); return 1;
+    }
+    while (generation == barrier->generation) SleepConditionVariableCS(&barrier->condition, &barrier->mutex, INFINITE);
+    LeaveCriticalSection(&barrier->mutex);
+#else
+    pthread_mutex_lock(&barrier->mutex);
+    generation = barrier->generation;
+    ++barrier->waiting;
+    if (barrier->waiting == barrier->count) {
+        barrier->waiting = 0U; ++barrier->generation; pthread_cond_broadcast(&barrier->condition); pthread_mutex_unlock(&barrier->mutex); return 1;
+    }
+    while (generation == barrier->generation) pthread_cond_wait(&barrier->condition, &barrier->mutex);
+    pthread_mutex_unlock(&barrier->mutex);
+#endif
+    return 0;
+}
+
+void x_barrier_destroy(x_barrier_t *barrier)
+{
+    if (barrier == NULL) return;
+#ifdef _WIN32
+    DeleteCriticalSection(&barrier->mutex);
+#else
+    pthread_cond_destroy(&barrier->condition); pthread_mutex_destroy(&barrier->mutex);
+#endif
+    free(barrier);
+}
+
+int x_once(x_once_t *once, x_once_fn function, void *data)
+{
+    if (once == NULL || function == NULL) return EINVAL;
+#ifdef _WIN32
+    while (InterlockedCompareExchange((volatile LONG *)&once->state, 1, 0) != 0) {
+        if (once->state == 2) return 0;
+        Sleep(0);
+    }
+    function(data);
+    InterlockedExchange((volatile LONG *)&once->state, 2);
+#else
+    if (__sync_bool_compare_and_swap(&once->state, 0, 1)) {
+        function(data);
+        __sync_synchronize();
+        once->state = 2;
+    } else {
+        while (once->state != 2) sched_yield();
+    }
+#endif
+    return 0;
+}
+
+static int x_thread_pool_worker(void *data)
+{
+    x_thread_pool_t *pool = (x_thread_pool_t *)data;
+    for (;;) {
+        struct x_thread_pool_task *task;
+#ifdef _WIN32
+        EnterCriticalSection(&pool->mutex);
+        while (!pool->stopping && pool->head == NULL) SleepConditionVariableCS(&pool->condition, &pool->mutex, INFINITE);
+        if (pool->stopping && pool->head == NULL) { LeaveCriticalSection(&pool->mutex); break; }
+        task = pool->head; pool->head = task->next; if (pool->head == NULL) pool->tail = NULL;
+        LeaveCriticalSection(&pool->mutex);
+#else
+        pthread_mutex_lock(&pool->mutex);
+        while (!pool->stopping && pool->head == NULL) pthread_cond_wait(&pool->condition, &pool->mutex);
+        if (pool->stopping && pool->head == NULL) { pthread_mutex_unlock(&pool->mutex); break; }
+        task = pool->head; pool->head = task->next; if (pool->head == NULL) pool->tail = NULL;
+        pthread_mutex_unlock(&pool->mutex);
+#endif
+        task->function(task->data);
+        free(task);
+    }
+    return 0;
+}
+
+int x_thread_pool_create(x_thread_pool_t **pool, unsigned int worker_count)
+{
+    x_thread_pool_t *created;
+    unsigned int i;
+    if (pool == NULL || worker_count == 0U) return EINVAL;
+    *pool = NULL;
+    created = (x_thread_pool_t *)calloc(1, sizeof(*created));
+    if (created == NULL) return ENOMEM;
+    created->worker_count = worker_count;
+    created->workers = (x_thread_t **)calloc(worker_count, sizeof(*created->workers));
+    if (created->workers == NULL) { free(created); return ENOMEM; }
+#ifdef _WIN32
+    InitializeCriticalSection(&created->mutex); InitializeConditionVariable(&created->condition);
+#else
+    pthread_mutex_init(&created->mutex, NULL); pthread_cond_init(&created->condition, NULL);
+#endif
+    for (i = 0; i < worker_count; ++i) {
+        int error = x_thread_create(&created->workers[i], x_thread_pool_worker, created);
+        if (error != 0) { x_thread_pool_destroy(created); return error; }
+    }
+    *pool = created;
+    return 0;
+}
+
+int x_thread_pool_submit(x_thread_pool_t *pool, x_thread_pool_task_fn function, void *data)
+{
+    struct x_thread_pool_task *task;
+    if (pool == NULL || function == NULL) return EINVAL;
+    task = (struct x_thread_pool_task *)calloc(1, sizeof(*task));
+    if (task == NULL) return ENOMEM;
+    task->function = function; task->data = data;
+#ifdef _WIN32
+    EnterCriticalSection(&pool->mutex);
+    if (pool->tail != NULL) pool->tail->next = task; else pool->head = task; pool->tail = task;
+    WakeConditionVariable(&pool->condition);
+    LeaveCriticalSection(&pool->mutex);
+#else
+    pthread_mutex_lock(&pool->mutex);
+    if (pool->tail != NULL) pool->tail->next = task; else pool->head = task; pool->tail = task;
+    pthread_cond_signal(&pool->condition);
+    pthread_mutex_unlock(&pool->mutex);
+#endif
+    return 0;
+}
+
+void x_thread_pool_destroy(x_thread_pool_t *pool)
+{
+    unsigned int i;
+    if (pool == NULL) return;
+#ifdef _WIN32
+    EnterCriticalSection(&pool->mutex); pool->stopping = 1; WakeAllConditionVariable(&pool->condition); LeaveCriticalSection(&pool->mutex);
+#else
+    pthread_mutex_lock(&pool->mutex); pool->stopping = 1; pthread_cond_broadcast(&pool->condition); pthread_mutex_unlock(&pool->mutex);
+#endif
+    for (i = 0; i < pool->worker_count; ++i) {
+        if (pool->workers[i] != NULL) { x_thread_join(pool->workers[i], NULL); x_thread_destroy(pool->workers[i]); }
+    }
+    while (pool->head != NULL) { struct x_thread_pool_task *task = pool->head; pool->head = task->next; free(task); }
+#ifdef _WIN32
+    DeleteCriticalSection(&pool->mutex);
+#else
+    pthread_cond_destroy(&pool->condition); pthread_mutex_destroy(&pool->mutex);
+#endif
+    free(pool->workers); free(pool);
 }

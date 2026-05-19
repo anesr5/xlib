@@ -15,10 +15,16 @@ Instead of directly using platform-specific APIs such as `pthread`, Win32 thread
 Current features include:
 
 - Cross-platform thread creation and joining
+- Thread creation options including stack size
 - Mutexes and recursive mutexes
 - Condition variables
 - Counting semaphores
 - Thread-local storage
+- Read-write locks
+- Barrier synchronization
+- Once initialization primitive
+- Thread pools
+- Thread affinity helpers
 - Monotonic and system clocks
 - High-resolution elapsed timers
 - Virtual memory allocation and protection
@@ -319,12 +325,12 @@ int main(void) {
 
 ### v2.5 - Advanced Threading
 
-- [ ] Read-write lock (`x_rwlock_t`) API
-- [ ] Barrier synchronization primitive
-- [ ] Thread pool with configurable worker count
-- [ ] Thread affinity / CPU pinning helpers
-- [ ] `once` primitive (`x_once_t`) for one-time initialization
-- [ ] Per-thread stack size configuration in `x_thread_create`
+- [x] Read-write lock (`x_rwlock_t`) API
+- [x] Barrier synchronization primitive
+- [x] Thread pool with configurable worker count
+- [x] Thread affinity / CPU pinning helpers
+- [x] `once` primitive (`x_once_t`) for one-time initialization
+- [x] Per-thread stack size configuration in `x_thread_create`
 
 ### v2.6 - Pluggable Allocator and Memory Diagnostics
 

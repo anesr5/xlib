@@ -11,6 +11,7 @@ extern "C" {
 #endif
 
 #define XLIB_SOCKET_ADDRESS_SIZE 128
+#define XLIB_INTERFACE_NAME_MAX 128
 
 typedef struct x_socket x_socket_t;
 
@@ -29,6 +30,20 @@ typedef struct x_socket_address {
     size_t length;
 } x_socket_address_t;
 
+typedef x_socket_address_t x_address_t;
+
+typedef enum x_socket_shutdown {
+    X_SOCKET_SHUTDOWN_READ = 1,
+    X_SOCKET_SHUTDOWN_WRITE = 2,
+    X_SOCKET_SHUTDOWN_BOTH = 3
+} x_socket_shutdown_t;
+
+typedef struct x_network_interface {
+    char name[XLIB_INTERFACE_NAME_MAX];
+    x_address_t address;
+    unsigned int flags;
+} x_network_interface_t;
+
 /*
  * Resolves host and service into a socket address for the given socket type.
  * host may be NULL when passive is non-zero to request a wildcard address.
@@ -41,6 +56,16 @@ XLIB_API int x_address_resolve(
     const char *service,
     int type,
     int passive);
+
+XLIB_API int x_address_resolve_all(
+    x_address_t **addresses,
+    size_t *count,
+    const char *host,
+    const char *service,
+    int type,
+    int passive);
+
+XLIB_API void x_address_list_free(x_address_t *addresses);
 
 XLIB_API int x_address_port(const x_socket_address_t *address, uint16_t *port);
 
@@ -78,10 +103,15 @@ XLIB_API int x_socket_udp(x_socket_t **socket);
 XLIB_API int x_socket_tcp6(x_socket_t **socket);
 XLIB_API int x_socket_udp6(x_socket_t **socket);
 
+/* IPv6 sockets configured to accept both IPv6 and IPv4-mapped traffic where supported. */
+XLIB_API int x_socket_tcp_dual_stack(x_socket_t **socket);
+XLIB_API int x_socket_udp_dual_stack(x_socket_t **socket);
+
 XLIB_API int x_socket_bind(x_socket_t *socket, const x_socket_address_t *address);
 XLIB_API int x_socket_listen(x_socket_t *socket, int backlog);
 XLIB_API int x_socket_accept(x_socket_t *socket, x_socket_t **client);
 XLIB_API int x_socket_connect(x_socket_t *socket, const x_socket_address_t *address);
+XLIB_API int x_socket_shutdown(x_socket_t *socket, int how);
 
 XLIB_API int x_socket_send(x_socket_t *socket, const void *buffer, size_t size, size_t *bytes_sent);
 XLIB_API int x_socket_receive(x_socket_t *socket, void *buffer, size_t size, size_t *bytes_received);
@@ -99,6 +129,7 @@ XLIB_API int x_socket_receive_from(
     size_t *bytes_received);
 
 XLIB_API int x_socket_local_address(x_socket_t *socket, x_socket_address_t *address);
+XLIB_API int x_socket_peer_address(x_socket_t *socket, x_socket_address_t *address);
 
 XLIB_API int x_socket_set_nonblocking(x_socket_t *socket, int enabled);
 XLIB_API int x_socket_set_reuse_address(x_socket_t *socket, int enabled);
@@ -133,6 +164,11 @@ XLIB_API int x_socket_udp_bound(
     x_socket_t **socket,
     const char *host,
     const char *service);
+
+XLIB_API int x_network_interfaces(x_network_interface_t **interfaces, size_t *count);
+XLIB_API void x_network_interfaces_free(x_network_interface_t *interfaces);
+
+XLIB_API int x_socket_would_block(int error);
 
 XLIB_API uintptr_t x_socket_native_handle(x_socket_t *socket);
 

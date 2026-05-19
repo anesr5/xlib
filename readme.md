@@ -2,7 +2,7 @@
 
 **xlib** is a lightweight MIT-licensed cross-platform low-level systems library for C and C++.
 
-Current version: `1.9.0`
+Current version: `2.0.0`
 
 It provides a small portable abstraction layer over operating system APIs, allowing developers to write low-level code once and compile it across Linux, Windows, and macOS.
 
@@ -45,6 +45,13 @@ Current features include:
 - Address resolution (IPv4 and IPv6)
 - Address formatting and parsing (`inet_ntop` / `inet_pton` wrappers)
 - Address family detection
+- Unified `x_address_t` address alias
+- Multi-result hostname resolution
+- Peer address retrieval
+- Socket shutdown helpers
+- Dual-stack IPv6 socket factories
+- Network interface enumeration
+- Platform-consistent socket would-block checks
 - Non-blocking sockets
 - Socket options
 - Socket send and receive timeouts
@@ -92,7 +99,7 @@ Current features include:
 
 Planned features include:
 
-- Full networking overhaul (IPv6, address families)
+- Complete C++ wrapper surface
 
 ---
 
@@ -240,16 +247,15 @@ int main(void) {
 - [x] Release checklist automation
 - [x] Extended platform support evaluation
 
-### v2.0 - IPv6 and Full Networking Overhaul
+### v2.0 - Networking API Unification
 
-- [ ] Full dual-stack IPv6 support across all socket APIs
-- [ ] Address family abstraction (`AF_INET` / `AF_INET6` unified)
-- [ ] `x_address_t` redesign to carry both v4 and v6 natively
-- [ ] Hostname resolution returning multiple results with iteration
-- [ ] Peer address retrieval on accepted/connected sockets
-- [ ] Socket `shutdown()` support (read, write, both)
-- [ ] Platform-consistent `EWOULDBLOCK` / `EAGAIN` unification
-- [ ] Network interface enumeration API
+- [x] Dual-stack IPv6 socket factories where supported
+- [x] Unified address alias (`x_address_t`) over IPv4 and IPv6 storage
+- [x] Hostname resolution returning multiple results
+- [x] Peer address retrieval on accepted/connected sockets
+- [x] Socket `shutdown()` support (read, write, both)
+- [x] Platform-consistent would-block checks
+- [x] Network interface enumeration API
 
 ### v2.1 - Complete C++ Wrapper Surface
 

@@ -18,7 +18,7 @@ The `examples/` directory contains focused smoke examples for each public module
 - `event_example.c`: combines timer events with loopback TCP socket readiness.
 - `filesystem_process_extensions_example.c`: exercises v1.4 file watchers, file watcher event sources, async file reads, process events, child environment blocks, pipes, pipelines, and terminal helpers.
 - `ipc_example.c`: checks shared memory regions, named semaphores, pluggable allocator, and mapped files.
-- `networking_extensions_example.c`: exercises UDP sockets, multicast group management, string address parsing, and timeout APIs.
+- `networking_extensions_example.c`: exercises v2.0 networking APIs including multi-result resolution, dual-stack sockets, peer address lookup, socket shutdown, interface enumeration, UDP convenience binding, multicast helpers, TLS hooks, string address parsing, and timeout APIs.
 - `diagnostics_example.c`: demonstrates log hooks, diagnostic callbacks, trace hooks, and assertions.
 - `stress_test.c`: a long-running multi-threaded program that continually allocates memory, files, and IPC constructs to validate concurrency and resource handling.
 

@@ -73,15 +73,22 @@ The backend maps to `LoadLibraryW`/`GetProcAddress` on Windows and `dlopen`/`dls
 
 Header: `xlib/network.h`
 
-- `x_address_resolve`, `x_address_port`
-- `x_socket_tcp`, `x_socket_udp`
-- `x_socket_bind`, `x_socket_listen`, `x_socket_accept`, `x_socket_connect`
+- `x_address_resolve`, `x_address_resolve_all`, `x_address_list_free`, `x_address_port`
+- `x_address_family`, `x_address_to_string`, `x_address_from_string`
+- `x_socket_tcp`, `x_socket_udp`, `x_socket_tcp6`, `x_socket_udp6`
+- `x_socket_tcp_dual_stack`, `x_socket_udp_dual_stack`
+- `x_socket_bind`, `x_socket_listen`, `x_socket_accept`, `x_socket_connect`, `x_socket_shutdown`
 - `x_socket_send`, `x_socket_receive`, `x_socket_send_to`, `x_socket_receive_from`
-- `x_socket_local_address`
+- `x_socket_local_address`, `x_socket_peer_address`
 - `x_socket_set_nonblocking`, `x_socket_set_reuse_address`, `x_socket_set_tcp_no_delay`
+- `x_socket_set_send_timeout`, `x_socket_set_receive_timeout`
+- `x_socket_join_multicast_group`, `x_socket_leave_multicast_group`
+- `x_socket_udp_bound`
+- `x_network_interfaces`, `x_network_interfaces_free`
+- `x_socket_would_block`
 - `x_socket_native_handle`, `x_socket_close`
 
-The current resolver and address structure focus on IPv4. Expanded IPv6 support is planned.
+`x_address_t` is an alias for the existing socket-address storage and carries either IPv4 or IPv6 addresses. `x_address_resolve_all` returns every matching address so callers can iterate connection attempts.
 
 ## Processes
 

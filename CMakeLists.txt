@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(
     xlib
-    VERSION 1.9.0
+    VERSION 2.0.0
     DESCRIPTION "A lightweight cross-platform low-level systems library for C and C++"
     LANGUAGES C CXX
 )
@@ -48,7 +48,7 @@ target_include_directories(xlib
 
 if(WIN32)
     target_compile_definitions(xlib PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-    target_link_libraries(xlib PUBLIC ws2_32)
+    target_link_libraries(xlib PUBLIC ws2_32 iphlpapi)
 else()
     find_package(Threads REQUIRED)
     target_link_libraries(xlib PUBLIC Threads::Threads)

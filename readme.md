@@ -72,6 +72,10 @@ Current features include:
 - Process exit events
 - File change events
 - Event source subtype introspection
+- File read/write event sources
+- Pipe read/write event sources
+- POSIX signal event sources
+- Child process stdout/stderr streaming via event loop
 - Event-loop wake and cancellation APIs
 - Repeating timer drift correction
 - Linux `epoll`, macOS/BSD `kqueue`, and Windows polling backends
@@ -278,12 +282,12 @@ int main(void) {
 
 ### v2.2 - Async I/O Foundation
 
-- [ ] Non-blocking file read/write event sources for the event loop
+- [x] Non-blocking file read/write event sources for the event loop
 - [ ] Native non-polling process exit backends where available
 - [ ] Native filesystem change watcher backends where available
-- [ ] Signal event sources on POSIX (`signalfd` / `kqueue EVFILT_SIGNAL`)
-- [ ] Pipe read/write event sources
-- [ ] Child process stdout/stderr streaming via event loop
+- [x] Signal event sources on POSIX (`signalfd` / `kqueue EVFILT_SIGNAL`)
+- [x] Pipe read/write event sources
+- [x] Child process stdout/stderr streaming via event loop
 - [x] Unified `x_event_source` subtype for all new sources
 
 ### v2.3 - IPC and Shared Memory

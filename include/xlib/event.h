@@ -23,7 +23,8 @@ typedef enum x_event_flags {
     X_EVENT_FILE = 16,
     X_EVENT_FILE_CREATED = 32,
     X_EVENT_FILE_MODIFIED = 64,
-    X_EVENT_FILE_DELETED = 128
+    X_EVENT_FILE_DELETED = 128,
+    X_EVENT_SIGNAL = 256
 } x_event_flags_t;
 
 typedef enum x_event_source_type {
@@ -31,7 +32,10 @@ typedef enum x_event_source_type {
     X_EVENT_SOURCE_SOCKET = 1,
     X_EVENT_SOURCE_TIMER = 2,
     X_EVENT_SOURCE_PROCESS = 3,
-    X_EVENT_SOURCE_FILE_WATCHER = 4
+    X_EVENT_SOURCE_FILE_WATCHER = 4,
+    X_EVENT_SOURCE_PIPE = 5,
+    X_EVENT_SOURCE_SIGNAL = 6,
+    X_EVENT_SOURCE_FILE_IO = 7
 } x_event_source_type_t;
 
 typedef int (*x_event_callback)(
@@ -75,6 +79,32 @@ XLIB_API int x_event_loop_add_file_watcher(
     x_event_loop_t *loop,
     x_event_source_t **source,
     x_file_watcher_t *watcher,
+    uint64_t interval_ms,
+    x_event_callback callback,
+    void *user_data);
+
+XLIB_API int x_event_loop_add_file(
+    x_event_loop_t *loop,
+    x_event_source_t **source,
+    x_file_t *file,
+    int events,
+    uint64_t interval_ms,
+    x_event_callback callback,
+    void *user_data);
+
+XLIB_API int x_event_loop_add_pipe(
+    x_event_loop_t *loop,
+    x_event_source_t **source,
+    x_pipe_t *pipe,
+    int events,
+    uint64_t interval_ms,
+    x_event_callback callback,
+    void *user_data);
+
+XLIB_API int x_event_loop_add_signal(
+    x_event_loop_t *loop,
+    x_event_source_t **source,
+    int signal_number,
     uint64_t interval_ms,
     x_event_callback callback,
     void *user_data);

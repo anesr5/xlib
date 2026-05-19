@@ -23,12 +23,35 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef ENOSYS
+#define ENOSYS ENOTSUP
+#endif
+
 #ifdef _WIN32
 #include <winsock2.h>
 #else
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/select.h>
 #include <unistd.h>
+#endif
+
+#ifndef _WIN32
+#ifndef XLIB_EVENT_SIGNAL_MAX
+#ifdef NSIG
+#define XLIB_EVENT_SIGNAL_MAX NSIG
+#else
+#define XLIB_EVENT_SIGNAL_MAX 128
+#endif
+#endif
+static volatile sig_atomic_t x_event_signal_pending[XLIB_EVENT_SIGNAL_MAX];
+
+static void x_event_signal_handler(int signal_number)
+{
+    if (signal_number > 0 && signal_number < XLIB_EVENT_SIGNAL_MAX) {
+        x_event_signal_pending[signal_number] = 1;
+    }
+}
 #endif
 
 #if defined(__linux__)
@@ -50,6 +73,9 @@ struct x_event_source {
     x_socket_t *socket;
     x_process_t *process;
     x_file_watcher_t *watcher;
+    x_file_t *file;
+    x_pipe_t *pipe;
+    int signal_number;
     uint64_t due_ns;
     uint64_t interval_ns;
     x_event_callback callback;
@@ -281,7 +307,10 @@ static int x_event_loop_next_timeout_ms(x_event_loop_t *loop, int *has_timeout, 
         if (!source->active
             || (source->type != X_EVENT_SOURCE_TIMER
                 && source->type != X_EVENT_SOURCE_PROCESS
-                && source->type != X_EVENT_SOURCE_FILE_WATCHER)) {
+                && source->type != X_EVENT_SOURCE_FILE_WATCHER
+                && source->type != X_EVENT_SOURCE_PIPE
+                && source->type != X_EVENT_SOURCE_SIGNAL
+                && source->type != X_EVENT_SOURCE_FILE_IO)) {
             continue;
         }
 
@@ -320,7 +349,10 @@ static int x_event_loop_dispatch_timers(x_event_loop_t *loop)
         if (!source->active
             || (source->type != X_EVENT_SOURCE_TIMER
                 && source->type != X_EVENT_SOURCE_PROCESS
-                && source->type != X_EVENT_SOURCE_FILE_WATCHER)
+                && source->type != X_EVENT_SOURCE_FILE_WATCHER
+                && source->type != X_EVENT_SOURCE_PIPE
+                && source->type != X_EVENT_SOURCE_SIGNAL
+                && source->type != X_EVENT_SOURCE_FILE_IO)
             || source->due_ns > now) {
             continue;
         }
@@ -345,6 +377,58 @@ static int x_event_loop_dispatch_timers(x_event_loop_t *loop)
 
             if (source->active) {
                 x_event_source_remove(source);
+            }
+            continue;
+        }
+
+        if (source->type == X_EVENT_SOURCE_FILE_IO) {
+            error = x_event_source_dispatch(source, source->events & (X_EVENT_READ | X_EVENT_WRITE));
+            if (error != 0) {
+                return error;
+            }
+
+            if (source->active) {
+                source->due_ns = now + source->interval_ns;
+            }
+            continue;
+        }
+
+        if (source->type == X_EVENT_SOURCE_SIGNAL) {
+#ifndef _WIN32
+            if (source->signal_number > 0
+                && source->signal_number < XLIB_EVENT_SIGNAL_MAX
+                && x_event_signal_pending[source->signal_number]) {
+                x_event_signal_pending[source->signal_number] = 0;
+                error = x_event_source_dispatch(source, X_EVENT_SIGNAL);
+                if (error != 0) {
+                    return error;
+                }
+            }
+#endif
+
+            if (source->active) {
+                source->due_ns = now + source->interval_ns;
+            }
+            continue;
+        }
+
+        if (source->type == X_EVENT_SOURCE_PIPE) {
+            int ready_events = 0;
+
+            error = x_pipe_poll(source->pipe, source->events, &ready_events);
+            if (error != 0) {
+                return error;
+            }
+
+            if (ready_events != 0) {
+                error = x_event_source_dispatch(source, ready_events);
+                if (error != 0) {
+                    return error;
+                }
+            }
+
+            if (source->active) {
+                source->due_ns = now + source->interval_ns;
             }
             continue;
         }
@@ -996,6 +1080,184 @@ int x_event_loop_add_file_watcher(
     loop->sources[loop->count++] = created;
     *source = created;
     return 0;
+}
+
+int x_event_loop_add_file(
+    x_event_loop_t *loop,
+    x_event_source_t **source,
+    x_file_t *file,
+    int events,
+    uint64_t interval_ms,
+    x_event_callback callback,
+    void *user_data)
+{
+    x_event_source_t *created;
+    uint64_t now;
+    int error;
+
+    if (loop == NULL || source == NULL || file == NULL || callback == NULL) {
+        return EINVAL;
+    }
+
+    if ((events & (X_EVENT_READ | X_EVENT_WRITE)) == 0) {
+        return EINVAL;
+    }
+
+    *source = NULL;
+
+    error = x_event_loop_reserve(loop, loop->count + 1U);
+    if (error != 0) {
+        return error;
+    }
+
+    error = x_time_monotonic_ns(&now);
+    if (error != 0) {
+        return error;
+    }
+
+    created = (x_event_source_t *)calloc(1, sizeof(*created));
+    if (created == NULL) {
+        return ENOMEM;
+    }
+
+    created->loop = loop;
+    created->type = X_EVENT_SOURCE_FILE_IO;
+    created->active = 1;
+    created->events = events & (X_EVENT_READ | X_EVENT_WRITE);
+    created->file = file;
+    created->due_ns = now;
+    created->interval_ns = x_event_ms_to_ns(interval_ms == 0U ? 10U : interval_ms);
+    created->callback = callback;
+    created->user_data = user_data;
+
+    loop->sources[loop->count++] = created;
+    *source = created;
+    return 0;
+}
+
+int x_event_loop_add_pipe(
+    x_event_loop_t *loop,
+    x_event_source_t **source,
+    x_pipe_t *pipe,
+    int events,
+    uint64_t interval_ms,
+    x_event_callback callback,
+    void *user_data)
+{
+    x_event_source_t *created;
+    uint64_t now;
+    int error;
+
+    if (loop == NULL || source == NULL || pipe == NULL || callback == NULL) {
+        return EINVAL;
+    }
+
+    if ((events & (X_EVENT_READ | X_EVENT_WRITE)) == 0) {
+        return EINVAL;
+    }
+
+    *source = NULL;
+
+    error = x_event_loop_reserve(loop, loop->count + 1U);
+    if (error != 0) {
+        return error;
+    }
+
+    error = x_time_monotonic_ns(&now);
+    if (error != 0) {
+        return error;
+    }
+
+    error = x_pipe_set_nonblocking(pipe, 1);
+    if (error != 0) {
+        return error;
+    }
+
+    created = (x_event_source_t *)calloc(1, sizeof(*created));
+    if (created == NULL) {
+        return ENOMEM;
+    }
+
+    created->loop = loop;
+    created->type = X_EVENT_SOURCE_PIPE;
+    created->active = 1;
+    created->events = events & (X_EVENT_READ | X_EVENT_WRITE);
+    created->pipe = pipe;
+    created->due_ns = now;
+    created->interval_ns = x_event_ms_to_ns(interval_ms == 0U ? 10U : interval_ms);
+    created->callback = callback;
+    created->user_data = user_data;
+
+    loop->sources[loop->count++] = created;
+    *source = created;
+    return 0;
+}
+
+int x_event_loop_add_signal(
+    x_event_loop_t *loop,
+    x_event_source_t **source,
+    int signal_number,
+    uint64_t interval_ms,
+    x_event_callback callback,
+    void *user_data)
+{
+#ifdef _WIN32
+    (void)loop;
+    (void)source;
+    (void)signal_number;
+    (void)interval_ms;
+    (void)callback;
+    (void)user_data;
+    return ENOSYS;
+#else
+    x_event_source_t *created;
+    struct sigaction action;
+    uint64_t now;
+    int error;
+
+    if (loop == NULL || source == NULL || callback == NULL || signal_number <= 0
+        || signal_number >= XLIB_EVENT_SIGNAL_MAX) {
+        return EINVAL;
+    }
+
+    *source = NULL;
+
+    error = x_event_loop_reserve(loop, loop->count + 1U);
+    if (error != 0) {
+        return error;
+    }
+
+    error = x_time_monotonic_ns(&now);
+    if (error != 0) {
+        return error;
+    }
+
+    memset(&action, 0, sizeof(action));
+    action.sa_handler = x_event_signal_handler;
+    sigemptyset(&action.sa_mask);
+    if (sigaction(signal_number, &action, NULL) != 0) {
+        return errno;
+    }
+
+    created = (x_event_source_t *)calloc(1, sizeof(*created));
+    if (created == NULL) {
+        return ENOMEM;
+    }
+
+    created->loop = loop;
+    created->type = X_EVENT_SOURCE_SIGNAL;
+    created->active = 1;
+    created->events = X_EVENT_SIGNAL;
+    created->signal_number = signal_number;
+    created->due_ns = now;
+    created->interval_ns = x_event_ms_to_ns(interval_ms == 0U ? 10U : interval_ms);
+    created->callback = callback;
+    created->user_data = user_data;
+
+    loop->sources[loop->count++] = created;
+    *source = created;
+    return 0;
+#endif
 }
 
 int x_event_source_type(const x_event_source_t *source)

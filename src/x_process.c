@@ -17,11 +17,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define X_PIPE_POLL_READ 1
+#define X_PIPE_POLL_WRITE 2
+
 #ifdef _WIN32
 #include <windows.h>
 #else
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/select.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -931,7 +935,13 @@ int x_pipe_read(x_pipe_t *pipe, void *buffer, size_t size, size_t *bytes_read)
 
         if (!ReadFile(pipe->handle, buffer, chunk, &actual, NULL)) {
             DWORD error = GetLastError();
-            return error == ERROR_BROKEN_PIPE ? 0 : x_process_error_from_windows(error);
+            if (error == ERROR_BROKEN_PIPE) {
+                return 0;
+            }
+            if (error == ERROR_NO_DATA) {
+                return EAGAIN;
+            }
+            return x_process_error_from_windows(error);
         }
 
         if (bytes_read != NULL) {
@@ -1000,6 +1010,104 @@ int x_pipe_write(x_pipe_t *pipe, const void *buffer, size_t size, size_t *bytes_
 
         if (bytes_written != NULL) {
             *bytes_written = (size_t)result;
+        }
+    }
+#endif
+
+    return 0;
+}
+
+int x_pipe_set_nonblocking(x_pipe_t *pipe, int enabled)
+{
+    if (pipe == NULL) {
+        return EINVAL;
+    }
+
+#ifdef _WIN32
+    {
+        DWORD mode = enabled ? PIPE_NOWAIT : PIPE_WAIT;
+        if (!SetNamedPipeHandleState(pipe->handle, &mode, NULL, NULL)) {
+            return x_process_error_from_windows(GetLastError());
+        }
+    }
+#else
+    {
+        int flags = fcntl(pipe->fd, F_GETFL, 0);
+        if (flags < 0) {
+            return errno;
+        }
+
+        if (enabled) {
+            flags |= O_NONBLOCK;
+        } else {
+            flags &= ~O_NONBLOCK;
+        }
+
+        if (fcntl(pipe->fd, F_SETFL, flags) != 0) {
+            return errno;
+        }
+    }
+#endif
+
+    return 0;
+}
+
+int x_pipe_poll(x_pipe_t *pipe, int events, int *ready_events)
+{
+    if (pipe == NULL || ready_events == NULL) {
+        return EINVAL;
+    }
+
+    *ready_events = 0;
+
+#ifdef _WIN32
+    if ((events & X_PIPE_POLL_READ) != 0) {
+        DWORD available = 0;
+        if (!PeekNamedPipe(pipe->handle, NULL, 0, NULL, &available, NULL)) {
+            DWORD error = GetLastError();
+            if (error == ERROR_BROKEN_PIPE) {
+                *ready_events |= X_PIPE_POLL_READ;
+            } else {
+                return x_process_error_from_windows(error);
+            }
+        } else if (available > 0U) {
+            *ready_events |= X_PIPE_POLL_READ;
+        }
+    }
+
+    if ((events & X_PIPE_POLL_WRITE) != 0) {
+        *ready_events |= X_PIPE_POLL_WRITE;
+    }
+#else
+    {
+        fd_set read_set;
+        fd_set write_set;
+        struct timeval timeout;
+        int result;
+
+        FD_ZERO(&read_set);
+        FD_ZERO(&write_set);
+
+        if ((events & X_PIPE_POLL_READ) != 0) {
+            FD_SET(pipe->fd, &read_set);
+        }
+        if ((events & X_PIPE_POLL_WRITE) != 0) {
+            FD_SET(pipe->fd, &write_set);
+        }
+
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 0;
+
+        result = select(pipe->fd + 1, &read_set, &write_set, NULL, &timeout);
+        if (result < 0) {
+            return errno == EINTR ? 0 : errno;
+        }
+
+        if ((events & X_PIPE_POLL_READ) != 0 && FD_ISSET(pipe->fd, &read_set)) {
+            *ready_events |= X_PIPE_POLL_READ;
+        }
+        if ((events & X_PIPE_POLL_WRITE) != 0 && FD_ISSET(pipe->fd, &write_set)) {
+            *ready_events |= X_PIPE_POLL_WRITE;
         }
     }
 #endif

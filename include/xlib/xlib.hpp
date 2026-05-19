@@ -297,6 +297,11 @@ public:
         }
     }
 
+    x_file_t *native_handle() noexcept
+    {
+        return file_;
+    }
+
 private:
     x_file_t *file_ = nullptr;
 };
@@ -887,6 +892,18 @@ public:
         return actual;
     }
 
+    void set_nonblocking(bool enabled)
+    {
+        check(x_pipe_set_nonblocking(pipe_, enabled ? 1 : 0), "x_pipe_set_nonblocking");
+    }
+
+    [[nodiscard]] int poll(int events)
+    {
+        int ready = 0;
+        check(x_pipe_poll(pipe_, events, &ready), "x_pipe_poll");
+        return ready;
+    }
+
     void close() noexcept
     {
         if (pipe_ != nullptr) {
@@ -1333,6 +1350,64 @@ public:
             callback,
             user_data),
             "x_event_loop_add_file_watcher");
+        return source;
+    }
+
+    x_event_source_t *add_file(
+        file &file_handle,
+        int events,
+        std::chrono::milliseconds interval,
+        x_event_callback callback,
+        void *user_data = nullptr)
+    {
+        x_event_source_t *source = nullptr;
+        check(x_event_loop_add_file(
+            loop_,
+            &source,
+            file_handle.native_handle(),
+            events,
+            static_cast<std::uint64_t>(interval.count()),
+            callback,
+            user_data),
+            "x_event_loop_add_file");
+        return source;
+    }
+
+    x_event_source_t *add_pipe(
+        pipe &pipe_handle,
+        int events,
+        std::chrono::milliseconds interval,
+        x_event_callback callback,
+        void *user_data = nullptr)
+    {
+        x_event_source_t *source = nullptr;
+        check(x_event_loop_add_pipe(
+            loop_,
+            &source,
+            pipe_handle.native_handle(),
+            events,
+            static_cast<std::uint64_t>(interval.count()),
+            callback,
+            user_data),
+            "x_event_loop_add_pipe");
+        return source;
+    }
+
+    x_event_source_t *add_signal(
+        int signal_number,
+        std::chrono::milliseconds interval,
+        x_event_callback callback,
+        void *user_data = nullptr)
+    {
+        x_event_source_t *source = nullptr;
+        check(x_event_loop_add_signal(
+            loop_,
+            &source,
+            signal_number,
+            static_cast<std::uint64_t>(interval.count()),
+            callback,
+            user_data),
+            "x_event_loop_add_signal");
         return source;
     }
 

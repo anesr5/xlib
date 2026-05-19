@@ -36,6 +36,8 @@ XLIB_API void x_process_destroy(x_process_t *process);
 XLIB_API int x_pipe_create(x_pipe_t **read_pipe, x_pipe_t **write_pipe);
 XLIB_API int x_pipe_read(x_pipe_t *pipe, void *buffer, size_t size, size_t *bytes_read);
 XLIB_API int x_pipe_write(x_pipe_t *pipe, const void *buffer, size_t size, size_t *bytes_written);
+XLIB_API int x_pipe_set_nonblocking(x_pipe_t *pipe, int enabled);
+XLIB_API int x_pipe_poll(x_pipe_t *pipe, int events, int *ready_events);
 XLIB_API void x_pipe_close(x_pipe_t *pipe);
 
 XLIB_API int x_process_run_pipeline(

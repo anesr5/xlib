@@ -99,7 +99,7 @@ Header: `xlib/process.h`
 - `x_process_poll`
 - `x_process_terminate`
 - `x_process_destroy`
-- `x_pipe_create`, `x_pipe_read`, `x_pipe_write`, `x_pipe_close`
+- `x_pipe_create`, `x_pipe_read`, `x_pipe_write`, `x_pipe_set_nonblocking`, `x_pipe_poll`, `x_pipe_close`
 - `x_process_run_pipeline`
 - `x_environment_get`, `x_environment_set`, `x_environment_unset`
 
@@ -115,10 +115,13 @@ Header: `xlib/event.h`
 - `x_event_loop_add_timer`
 - `x_event_loop_add_process`
 - `x_event_loop_add_file_watcher`
+- `x_event_loop_add_file`
+- `x_event_loop_add_pipe`
+- `x_event_loop_add_signal`
 - `x_event_source_type`
 - `x_event_source_remove`
 
-`x_event_source_type` returns `X_EVENT_SOURCE_SOCKET`, `X_EVENT_SOURCE_TIMER`, `X_EVENT_SOURCE_PROCESS`, `X_EVENT_SOURCE_FILE_WATCHER`, or `X_EVENT_SOURCE_UNKNOWN` for invalid/inactive sources.
+`x_event_source_type` returns `X_EVENT_SOURCE_SOCKET`, `X_EVENT_SOURCE_TIMER`, `X_EVENT_SOURCE_PROCESS`, `X_EVENT_SOURCE_FILE_WATCHER`, `X_EVENT_SOURCE_PIPE`, `X_EVENT_SOURCE_SIGNAL`, `X_EVENT_SOURCE_FILE_IO`, or `X_EVENT_SOURCE_UNKNOWN` for invalid/inactive sources.
 
 Backends include Linux `epoll`, macOS/BSD `kqueue`, and a portable `select`-based fallback used on Windows. Repeating timers are scheduled from their previous due time to reduce drift. Process and file watcher sources are implemented as portable polling sources on top of the same loop scheduler.
 

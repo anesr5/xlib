@@ -1,5 +1,6 @@
 #include <xlib/event.h>
 #include <xlib/network.h>
+#include <xlib/process.h>
 #include <xlib/thread.h>
 #include <xlib/time.h>
 
@@ -180,6 +181,140 @@ static int run_cancel_check(void)
     return 0;
 }
 
+struct file_io_state {
+    x_file_t *file;
+    int done;
+};
+
+static int file_io_callback(
+    x_event_loop_t *loop,
+    x_event_source_t *source,
+    int events,
+    void *user_data)
+{
+    struct file_io_state *state = (struct file_io_state *)user_data;
+    size_t actual = 0U;
+
+    if ((events & X_EVENT_WRITE) == 0) {
+        return 1;
+    }
+
+    if (x_file_write(state->file, "ok", 2U, &actual) != 0 || actual != 2U) {
+        return 1;
+    }
+
+    state->done = 1;
+    x_event_source_remove(source);
+    x_event_loop_stop(loop);
+    return 0;
+}
+
+static int run_file_io_check(void)
+{
+    x_event_loop_t *loop;
+    x_event_source_t *source;
+    x_file_t *file;
+    struct file_io_state state;
+
+    x_file_remove("xlib_event_file_io.tmp");
+
+    if (x_event_loop_create(&loop) != 0) {
+        return 1;
+    }
+
+    if (x_file_open(&file, "xlib_event_file_io.tmp", X_FILE_WRITE | X_FILE_CREATE | X_FILE_TRUNCATE) != 0) {
+        x_event_loop_destroy(loop);
+        return 1;
+    }
+
+    state.file = file;
+    state.done = 0;
+
+    if (x_event_loop_add_file(loop, &source, file, X_EVENT_WRITE, 1U, file_io_callback, &state) != 0
+        || x_event_source_type(source) != X_EVENT_SOURCE_FILE_IO
+        || x_event_loop_run(loop) != 0
+        || !state.done) {
+        x_file_close(file);
+        x_file_remove("xlib_event_file_io.tmp");
+        x_event_loop_destroy(loop);
+        return 1;
+    }
+
+    x_file_close(file);
+    x_file_remove("xlib_event_file_io.tmp");
+    x_event_loop_destroy(loop);
+    return 0;
+}
+
+struct pipe_state {
+    x_pipe_t *read_pipe;
+    int done;
+};
+
+static int pipe_callback(
+    x_event_loop_t *loop,
+    x_event_source_t *source,
+    int events,
+    void *user_data)
+{
+    struct pipe_state *state = (struct pipe_state *)user_data;
+    char buffer[8];
+    size_t actual = 0U;
+
+    if ((events & X_EVENT_READ) == 0) {
+        return 1;
+    }
+
+    if (x_pipe_read(state->read_pipe, buffer, sizeof(buffer), &actual) != 0 || actual != 2U
+        || buffer[0] != 'i' || buffer[1] != 'o') {
+        return 1;
+    }
+
+    state->done = 1;
+    x_event_source_remove(source);
+    x_event_loop_stop(loop);
+    return 0;
+}
+
+static int run_pipe_check(void)
+{
+    x_event_loop_t *loop;
+    x_event_source_t *source;
+    x_pipe_t *read_pipe;
+    x_pipe_t *write_pipe;
+    struct pipe_state state;
+    size_t actual = 0U;
+
+    if (x_event_loop_create(&loop) != 0) {
+        return 1;
+    }
+
+    if (x_pipe_create(&read_pipe, &write_pipe) != 0) {
+        x_event_loop_destroy(loop);
+        return 1;
+    }
+
+    state.read_pipe = read_pipe;
+    state.done = 0;
+
+    if (x_event_loop_add_pipe(loop, &source, read_pipe, X_EVENT_READ, 1U, pipe_callback, &state) != 0
+        || x_event_source_type(source) != X_EVENT_SOURCE_PIPE
+        || x_pipe_write(write_pipe, "io", 2U, &actual) != 0
+        || actual != 2U
+        || x_event_loop_run(loop) != 0
+        || !state.done) {
+        x_pipe_close(write_pipe);
+        x_pipe_close(read_pipe);
+        x_event_loop_destroy(loop);
+        return 1;
+    }
+
+    x_pipe_close(write_pipe);
+    x_pipe_close(read_pipe);
+    x_event_loop_destroy(loop);
+    return 0;
+}
+
 static int run_socket_and_timer_check(void)
 {
     struct event_state state;
@@ -264,7 +399,10 @@ static int run_socket_and_timer_check(void)
 
 int main(void)
 {
-    if (run_socket_and_timer_check() != 0 || run_cancel_check() != 0) {
+    if (run_socket_and_timer_check() != 0
+        || run_file_io_check() != 0
+        || run_pipe_check() != 0
+        || run_cancel_check() != 0) {
         return 1;
     }
 

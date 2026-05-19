@@ -27,7 +27,7 @@ The `examples/` directory contains focused smoke examples for each public module
 - `tcp_server_example.c`: minimal TCP echo server.
 - `tcp_client_example.c`: minimal TCP client.
 - `cpp_wrapper_example.cpp`: exercises the header-only C++ wrappers for threads, mutexes, files, dynamic libraries, and sockets.
-- `cpp_wrappers_v17_example.cpp`: exercises newer C++ Wrappers like `directory_iterator` and `process`.
+- `cpp_wrappers_v17_example.cpp`: exercises the v2.1 C++ wrapper surface including typed TLS keys, mapped files, process polling, event timers, range-for directories, chrono timers, resolve-all networking, interface enumeration, and socket helpers.
 
 ## Running Examples
 

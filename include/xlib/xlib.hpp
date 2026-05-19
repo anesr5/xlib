@@ -14,6 +14,7 @@
 #include <system_error>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace xlib {
 
@@ -376,11 +377,34 @@ class socket_address {
 public:
     socket_address() = default;
 
+    explicit socket_address(const x_socket_address_t &address)
+        : address_(address)
+    {
+    }
+
     [[nodiscard]] static socket_address resolve(
         const char *host, const char *service, int type, bool passive = false)
     {
         socket_address result;
         check(x_address_resolve(&result.address_, host, service, type, passive ? 1 : 0), "x_address_resolve");
+        return result;
+    }
+
+    [[nodiscard]] static std::vector<socket_address> resolve_all(
+        const char *host, const char *service, int type, bool passive = false)
+    {
+        x_address_t *addresses = nullptr;
+        std::size_t count = 0;
+        check(x_address_resolve_all(&addresses, &count, host, service, type, passive ? 1 : 0),
+            "x_address_resolve_all");
+
+        std::vector<socket_address> result;
+        result.reserve(count);
+        for (std::size_t i = 0; i < count; ++i) {
+            result.push_back(socket_address(addresses[i]));
+        }
+
+        x_address_list_free(addresses);
         return result;
     }
 
@@ -457,6 +481,20 @@ public:
         return socket(handle);
     }
 
+    [[nodiscard]] static socket tcp_dual_stack()
+    {
+        x_socket_t *handle = nullptr;
+        check(x_socket_tcp_dual_stack(&handle), "x_socket_tcp_dual_stack");
+        return socket(handle);
+    }
+
+    [[nodiscard]] static socket udp_dual_stack()
+    {
+        x_socket_t *handle = nullptr;
+        check(x_socket_udp_dual_stack(&handle), "x_socket_udp_dual_stack");
+        return socket(handle);
+    }
+
     socket(const socket &) = delete;
     socket &operator=(const socket &) = delete;
 
@@ -504,6 +542,11 @@ public:
         check(x_socket_connect(socket_, address.native_handle()), "x_socket_connect");
     }
 
+    void shutdown(int how)
+    {
+        check(x_socket_shutdown(socket_, how), "x_socket_shutdown");
+    }
+
     [[nodiscard]] std::size_t send(const void *buffer, std::size_t size)
     {
         std::size_t actual = 0;
@@ -518,10 +561,36 @@ public:
         return actual;
     }
 
+    [[nodiscard]] std::size_t send_to(const socket_address &address, const void *buffer, std::size_t size)
+    {
+        std::size_t actual = 0;
+        check(x_socket_send_to(socket_, address.native_handle(), buffer, size, &actual), "x_socket_send_to");
+        return actual;
+    }
+
+    [[nodiscard]] std::size_t receive_from(socket_address *address, void *buffer, std::size_t size)
+    {
+        std::size_t actual = 0;
+        x_socket_address_t native_address;
+        x_socket_address_t *native_pointer = address != nullptr ? &native_address : nullptr;
+        check(x_socket_receive_from(socket_, native_pointer, buffer, size, &actual), "x_socket_receive_from");
+        if (address != nullptr) {
+            *address = socket_address(native_address);
+        }
+        return actual;
+    }
+
     [[nodiscard]] socket_address local_address()
     {
         socket_address address;
         check(x_socket_local_address(socket_, address.native_handle()), "x_socket_local_address");
+        return address;
+    }
+
+    [[nodiscard]] socket_address peer_address()
+    {
+        socket_address address;
+        check(x_socket_peer_address(socket_, address.native_handle()), "x_socket_peer_address");
         return address;
     }
 
@@ -562,6 +631,11 @@ public:
             "x_socket_leave_multicast_group");
     }
 
+    [[nodiscard]] static bool would_block(int error) noexcept
+    {
+        return x_socket_would_block(error) != 0;
+    }
+
     x_socket_t *native_handle() noexcept
     {
         return socket_;
@@ -582,6 +656,49 @@ private:
     }
 
     x_socket_t *socket_ = nullptr;
+};
+
+class network_interfaces {
+public:
+    network_interfaces()
+    {
+        check(x_network_interfaces(&interfaces_, &count_), "x_network_interfaces");
+    }
+
+    network_interfaces(const network_interfaces &) = delete;
+    network_interfaces &operator=(const network_interfaces &) = delete;
+
+    network_interfaces(network_interfaces &&other) noexcept
+        : interfaces_(other.interfaces_), count_(other.count_)
+    {
+        other.interfaces_ = nullptr;
+        other.count_ = 0;
+    }
+
+    network_interfaces &operator=(network_interfaces &&other) noexcept
+    {
+        if (this != &other) {
+            x_network_interfaces_free(interfaces_);
+            interfaces_ = other.interfaces_;
+            count_ = other.count_;
+            other.interfaces_ = nullptr;
+            other.count_ = 0;
+        }
+        return *this;
+    }
+
+    ~network_interfaces()
+    {
+        x_network_interfaces_free(interfaces_);
+    }
+
+    [[nodiscard]] const x_network_interface_t *begin() const noexcept { return interfaces_; }
+    [[nodiscard]] const x_network_interface_t *end() const noexcept { return interfaces_ + count_; }
+    [[nodiscard]] std::size_t size() const noexcept { return count_; }
+
+private:
+    x_network_interface_t *interfaces_ = nullptr;
+    std::size_t count_ = 0;
 };
 
 // ---- condition -------------------------------------------------------------
@@ -659,6 +776,137 @@ public:
 
 private:
     x_semaphore_t *semaphore_ = nullptr;
+};
+
+template <typename T>
+class tls_key {
+public:
+    tls_key()
+    {
+        check(x_tls_key_create(&key_), "x_tls_key_create");
+    }
+
+    tls_key(const tls_key &) = delete;
+    tls_key &operator=(const tls_key &) = delete;
+
+    tls_key(tls_key &&other) noexcept
+        : key_(other.key_)
+    {
+        other.key_ = nullptr;
+    }
+
+    tls_key &operator=(tls_key &&other) noexcept
+    {
+        if (this != &other) {
+            reset();
+            key_ = other.key_;
+            other.key_ = nullptr;
+        }
+        return *this;
+    }
+
+    ~tls_key()
+    {
+        reset();
+    }
+
+    void set(T *value)
+    {
+        check(x_tls_set(key_, value), "x_tls_set");
+    }
+
+    [[nodiscard]] T *get() const noexcept
+    {
+        return static_cast<T *>(x_tls_get(key_));
+    }
+
+    x_tls_key_t *native_handle() noexcept
+    {
+        return key_;
+    }
+
+private:
+    void reset() noexcept
+    {
+        if (key_ != nullptr) {
+            x_tls_key_destroy(key_);
+            key_ = nullptr;
+        }
+    }
+
+    x_tls_key_t *key_ = nullptr;
+};
+
+class pipe {
+public:
+    pipe() = default;
+
+    pipe(const pipe &) = delete;
+    pipe &operator=(const pipe &) = delete;
+
+    pipe(pipe &&other) noexcept
+        : pipe_(other.pipe_)
+    {
+        other.pipe_ = nullptr;
+    }
+
+    pipe &operator=(pipe &&other) noexcept
+    {
+        if (this != &other) {
+            close();
+            pipe_ = other.pipe_;
+            other.pipe_ = nullptr;
+        }
+        return *this;
+    }
+
+    ~pipe()
+    {
+        close();
+    }
+
+    [[nodiscard]] static std::pair<pipe, pipe> create()
+    {
+        x_pipe_t *read_pipe = nullptr;
+        x_pipe_t *write_pipe = nullptr;
+        check(x_pipe_create(&read_pipe, &write_pipe), "x_pipe_create");
+        return std::make_pair(pipe(read_pipe), pipe(write_pipe));
+    }
+
+    [[nodiscard]] std::size_t read(void *buffer, std::size_t size)
+    {
+        std::size_t actual = 0;
+        check(x_pipe_read(pipe_, buffer, size, &actual), "x_pipe_read");
+        return actual;
+    }
+
+    [[nodiscard]] std::size_t write(const void *buffer, std::size_t size)
+    {
+        std::size_t actual = 0;
+        check(x_pipe_write(pipe_, buffer, size, &actual), "x_pipe_write");
+        return actual;
+    }
+
+    void close() noexcept
+    {
+        if (pipe_ != nullptr) {
+            x_pipe_close(pipe_);
+            pipe_ = nullptr;
+        }
+    }
+
+    x_pipe_t *native_handle() noexcept
+    {
+        return pipe_;
+    }
+
+private:
+    explicit pipe(x_pipe_t *handle)
+        : pipe_(handle)
+    {
+    }
+
+    x_pipe_t *pipe_ = nullptr;
 };
 
 // ---- mapped_file -----------------------------------------------------------
@@ -797,6 +1045,13 @@ public:
         return exit_code;
     }
 
+    [[nodiscard]] bool poll(int *exit_code = nullptr)
+    {
+        int completed = 0;
+        check(x_process_poll(process_, &completed, exit_code), "x_process_poll");
+        return completed != 0;
+    }
+
     void terminate()
     {
         check(x_process_terminate(process_), "x_process_terminate");
@@ -817,6 +1072,64 @@ public:
 
 private:
     x_process_t *process_ = nullptr;
+};
+
+class file_watcher {
+public:
+    explicit file_watcher(const char *path)
+    {
+        check(x_file_watcher_create(&watcher_, path), "x_file_watcher_create");
+    }
+
+    explicit file_watcher(const std::string &path)
+        : file_watcher(path.c_str())
+    {
+    }
+
+    file_watcher(const file_watcher &) = delete;
+    file_watcher &operator=(const file_watcher &) = delete;
+
+    file_watcher(file_watcher &&other) noexcept
+        : watcher_(other.watcher_)
+    {
+        other.watcher_ = nullptr;
+    }
+
+    file_watcher &operator=(file_watcher &&other) noexcept
+    {
+        if (this != &other) {
+            destroy();
+            watcher_ = other.watcher_;
+            other.watcher_ = nullptr;
+        }
+        return *this;
+    }
+
+    ~file_watcher()
+    {
+        destroy();
+    }
+
+    void poll(x_file_watch_callback callback, void *user_data = nullptr)
+    {
+        check(x_file_watcher_poll(watcher_, callback, user_data), "x_file_watcher_poll");
+    }
+
+    void destroy() noexcept
+    {
+        if (watcher_ != nullptr) {
+            x_file_watcher_destroy(watcher_);
+            watcher_ = nullptr;
+        }
+    }
+
+    x_file_watcher_t *native_handle() noexcept
+    {
+        return watcher_;
+    }
+
+private:
+    x_file_watcher_t *watcher_ = nullptr;
 };
 
 // ---- directory_entry / directory_iterator / directory ----------------------
@@ -964,6 +1277,60 @@ public:
         x_event_loop_stop(loop_);
     }
 
+    x_event_source_t *add_timer(
+        std::chrono::milliseconds delay,
+        std::chrono::milliseconds interval,
+        x_event_callback callback,
+        void *user_data = nullptr)
+    {
+        x_event_source_t *source = nullptr;
+        check(x_event_loop_add_timer(
+            loop_,
+            &source,
+            static_cast<std::uint64_t>(delay.count()),
+            static_cast<std::uint64_t>(interval.count()),
+            callback,
+            user_data),
+            "x_event_loop_add_timer");
+        return source;
+    }
+
+    x_event_source_t *add_process(
+        process &proc,
+        std::chrono::milliseconds interval,
+        x_event_callback callback,
+        void *user_data = nullptr)
+    {
+        x_event_source_t *source = nullptr;
+        check(x_event_loop_add_process(
+            loop_,
+            &source,
+            proc.native_handle(),
+            static_cast<std::uint64_t>(interval.count()),
+            callback,
+            user_data),
+            "x_event_loop_add_process");
+        return source;
+    }
+
+    x_event_source_t *add_file_watcher(
+        file_watcher &watcher,
+        std::chrono::milliseconds interval,
+        x_event_callback callback,
+        void *user_data = nullptr)
+    {
+        x_event_source_t *source = nullptr;
+        check(x_event_loop_add_file_watcher(
+            loop_,
+            &source,
+            watcher.native_handle(),
+            static_cast<std::uint64_t>(interval.count()),
+            callback,
+            user_data),
+            "x_event_loop_add_file_watcher");
+        return source;
+    }
+
     x_event_loop_t *native_handle() noexcept
     {
         return loop_;
@@ -1013,6 +1380,34 @@ inline void sleep_precise(std::chrono::duration<Rep, Period> duration)
 }
 
 } // namespace chrono
+
+class timer {
+public:
+    timer()
+    {
+        restart();
+    }
+
+    void restart()
+    {
+        check(x_timer_start(&timer_), "x_timer_start");
+    }
+
+    [[nodiscard]] std::chrono::nanoseconds elapsed() const
+    {
+        std::uint64_t ns = 0;
+        check(x_timer_elapsed_ns(&timer_, &ns), "x_timer_elapsed_ns");
+        return std::chrono::nanoseconds(static_cast<std::int64_t>(ns));
+    }
+
+    [[nodiscard]] const x_timer_t *native_handle() const noexcept
+    {
+        return &timer_;
+    }
+
+private:
+    x_timer_t timer_{};
+};
 
 // ---- error category -------------------------------------------------------
 //

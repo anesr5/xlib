@@ -171,12 +171,15 @@ The C++ layer is header-only and throws `std::system_error` for failed C API cal
 
 - `xlib::thread`
 - `xlib::mutex`, `xlib::recursive_mutex`, `xlib::lock_guard`
+- `xlib::condition`, `xlib::semaphore`, `xlib::tls_key<T>`
 - `xlib::file`
+- `xlib::file_watcher`
 - `xlib::dynamic_library`
-- `xlib::socket`, `xlib::socket_address`
+- `xlib::socket`, `xlib::socket_address`, `xlib::network_interfaces`
 - `xlib::directory_entry`, `xlib::directory_iterator`, `xlib::directory`
-- `xlib::process`
+- `xlib::pipe`, `xlib::process`
 - `xlib::event_loop`
+- `xlib::mapped_file`, `xlib::timer`
 - `xlib::xlib_error_category`, `xlib::make_xlib_error_code`
 - `xlib::log_hook_guard`, `xlib::diag_hook_guard`, `xlib::trace_hook_guard`
 - `xlib::check`, `xlib::make_error_code`

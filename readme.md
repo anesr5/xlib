@@ -2,7 +2,7 @@
 
 **xlib** is a lightweight MIT-licensed cross-platform low-level systems library for C and C++.
 
-Current version: `2.0.0`
+Current version: `2.1.0`
 
 It provides a small portable abstraction layer over operating system APIs, allowing developers to write low-level code once and compile it across Linux, Windows, and macOS.
 
@@ -75,6 +75,10 @@ Current features include:
 - Repeating timer drift correction
 - Linux `epoll`, macOS/BSD `kqueue`, and Windows polling backends
 - Header-only C++ RAII wrappers
+- C++ typed thread-local storage wrapper
+- C++ timer wrapper
+- C++ pipe and file watcher wrappers
+- C++ networking wrappers for v2.0 APIs
 - C++ RAII process wrapper
 - C++ RAII event-loop wrapper
 - C++ RAII memory mapping wrapper
@@ -99,7 +103,7 @@ Current features include:
 
 Planned features include:
 
-- Complete C++ wrapper surface
+- Async I/O foundation
 
 ---
 
@@ -259,15 +263,17 @@ int main(void) {
 
 ### v2.1 - Complete C++ Wrapper Surface
 
-- [ ] `xlib::process` RAII wrapper with wait/terminate/exit-code
-- [ ] `xlib::event_loop` RAII wrapper
-- [ ] `xlib::mapped_file` RAII wrapper
-- [ ] `xlib::directory` / `xlib::directory_iterator` (range-for compatible)
-- [ ] `xlib::condition` RAII wrapper
-- [ ] `xlib::semaphore` RAII wrapper
-- [ ] `xlib::tls_key<T>` typed thread-local storage wrapper
-- [ ] `std::chrono` integration for all time and sleep APIs
-- [ ] C++17 `[[nodiscard]]` annotations on error-returning wrappers
+- [x] `xlib::process` RAII wrapper with wait/terminate/exit-code
+- [x] `xlib::event_loop` RAII wrapper
+- [x] `xlib::mapped_file` RAII wrapper
+- [x] `xlib::directory` / `xlib::directory_iterator` (range-for compatible)
+- [x] `xlib::condition` RAII wrapper
+- [x] `xlib::semaphore` RAII wrapper
+- [x] `xlib::tls_key<T>` typed thread-local storage wrapper
+- [x] `std::chrono` integration for all time and sleep APIs
+- [x] C++17 `[[nodiscard]]` annotations on value-returning wrappers
+- [x] C++ wrappers for v2.0 networking additions
+- [x] C++ wrappers for process pipes, polling, timers, and file watchers
 
 ### v2.2 - Async I/O Foundation
 

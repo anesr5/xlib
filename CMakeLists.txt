@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(
     xlib
-    VERSION 2.0.0
+    VERSION 2.1.0
     DESCRIPTION "A lightweight cross-platform low-level systems library for C and C++"
     LANGUAGES C CXX
 )
@@ -180,7 +180,10 @@ if(XLIB_BUILD_EXAMPLES)
     target_compile_features(xlib_cpp_wrappers_v17_example PRIVATE cxx_std_17)
     target_link_libraries(xlib_cpp_wrappers_v17_example PRIVATE xlib::xlib)
 
-    add_test(NAME xlib_cpp_wrappers_v17_example COMMAND xlib_cpp_wrappers_v17_example)
+    add_test(
+        NAME xlib_cpp_wrappers_v17_example
+        COMMAND xlib_cpp_wrappers_v17_example $<TARGET_FILE:xlib_process_helper>
+    )
 
     add_executable(xlib_cpp_wrapper_example examples/cpp_wrapper_example.cpp)
     target_compile_features(xlib_cpp_wrapper_example PRIVATE cxx_std_11)

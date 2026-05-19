@@ -1,177 +1,37 @@
 # xlib
 
-**xlib** is a lightweight MIT-licensed cross-platform low-level systems library for C and C++.
-
-Current version: `2.5.0`
-
-It provides a small portable abstraction layer over operating system APIs, allowing developers to write low-level code once and compile it across Linux, Windows, and macOS.
-
-Instead of directly using platform-specific APIs such as `pthread`, Win32 threads, `mmap`, `dlopen`, or `LoadLibrary`, xlib exposes a unified API and maps it internally to the correct native backend.
-
 ---
 
-## Features
+## What is xlib?
 
-Current features include:
+**xlib** is a small MIT-licensed systems programming library for C and C++.
 
-- Cross-platform thread creation and joining
-- Thread creation options including stack size
-- Mutexes and recursive mutexes
-- Condition variables
-- Counting semaphores
-- Thread-local storage
-- Read-write locks
-- Barrier synchronization
-- Once initialization primitive
-- Thread pools
-- Thread affinity helpers
-- Monotonic and system clocks
-- High-resolution elapsed timers
-- Virtual memory allocation and protection
-- Page size detection
-- Read-write memory-mapped files
-- Read-only memory-mapped files
-- Mapped file open with configurable protection
-- Named shared memory regions
-- Shared memory with configurable protection flags
-- Named counting semaphores
-- Named cross-process mutexes
-- Named byte-stream pipes
-- Inter-process fixed-size message queues
-- Memory-mapped file resize API
-- Pluggable global allocator
-- Allocation dispatch helpers (`x_alloc`, `x_realloc`, `x_free`)
-- File I/O
-- Directory creation and iteration
-- Path utilities
-- UTF-8 path handling on Windows
-- File watcher API
-- File watcher event sources
-- Async whole-file read helper
-- Dynamic library loading
-- Dynamic symbol lookup
-- Dynamic library error reporting
-- TCP and UDP sockets
-- IPv6 TCP and UDP sockets
-- Address resolution (IPv4 and IPv6)
-- Address formatting and parsing (`inet_ntop` / `inet_pton` wrappers)
-- Address family detection
-- Unified `x_address_t` address alias
-- Multi-result hostname resolution
-- Peer address retrieval
-- Socket shutdown helpers
-- Dual-stack IPv6 socket factories
-- Network interface enumeration
-- Platform-consistent socket would-block checks
-- Non-blocking sockets
-- Socket options
-- Socket send and receive timeouts
-- IPv4 multicast join and leave helpers
-- UDP convenience bind helper
-- TLS integration hook API (pluggable backend)
-- TLS stream wrapper over sockets
-- TLS certificate and private-key loading hooks
-- TLS SNI and hostname verification helpers
-- Event-loop TLS handshake source
-- Process creation, waiting, and termination
-- Non-blocking process polling
-- Exit code retrieval
-- Anonymous pipe handles
-- Two-stage process pipeline helper
-- Environment variable helpers
-- Per-child environment blocks
-- Standard input/output/error redirection for child processes
-- Event loop support
-- Timer events
-- Socket readiness events
-- Process exit events
-- File change events
-- Event source subtype introspection
-- File read/write event sources
-- Pipe read/write event sources
-- POSIX signal event sources
-- Child process stdout/stderr streaming via event loop
-- Event-loop wake and cancellation APIs
-- Repeating timer drift correction
-- Linux `epoll`, macOS/BSD `kqueue`, and Windows polling backends
-- Header-only C++ RAII wrappers
-- C++ typed thread-local storage wrapper
-- C++ timer wrapper
-- C++ pipe and file watcher wrappers
-- C++ networking wrappers for v2.0 APIs
-- C++ RAII process wrapper
-- C++ RAII event-loop wrapper
-- C++ RAII memory mapping wrapper
-- C++ RAII condition and semaphore wrappers
-- C++ range-for directory iterator
-- `std::chrono` integration for time and sleep APIs
-- `[[nodiscard]]` annotations on all value-returning C++ methods
-- C++ error utilities based on `std::system_error`
-- Cross-platform terminal/TTY helpers
-- Millisecond sleep utilities
-- Microsecond sleep utilities
-- CMake build support
-- Example programs
-- CI coverage for Linux, Windows, and macOS
-- Package install validation
-- Optional sanitizer builds on supported GCC/Clang platforms
-- Structured logging hooks
-- Runtime diagnostics callbacks
-- Optional tracing hooks
-- Debug assertions for invalid API usage
-- C++ error category support (`std::error_category` subclass)
+It provides a portable abstraction layer over common operating system APIs such as threads, mutexes, files, memory mapping, dynamic libraries, sockets, processes, IPC, timers, and event loops.
 
-Planned features include:
+Instead of writing platform-specific code like this:
 
-- Async I/O foundation
+```c
+#ifdef _WIN32
+    /* Win32 API */
+#else
+    /* POSIX API */
+#endif
+```
 
----
-
-## Goals
-
-xlib aims to be:
-
-- Lightweight
-- Portable
-- Easy to build
-- Dependency-free where possible
-- Friendly to both C and C++
-- Suitable for systems programming
-- Simple enough to embed into other projects
-
----
-
-## Why xlib?
-
-Writing portable low-level C/C++ code is difficult because every operating system has different APIs.
-
-For example:
-
-| Feature | Linux/macOS | Windows |
-|---|---|---|
-| Threads | `pthread` | Win32 threads |
-| Dynamic libraries | `dlopen` | `LoadLibrary` |
-| Virtual memory | `mmap` | `VirtualAlloc` |
-| File descriptors | POSIX file descriptors | Windows handles |
-| Event polling | `epoll` / `kqueue` | IOCP / Win32 APIs |
-
-xlib provides a common API over these platform-specific systems.
-
----
-
-## Example
+xlib gives you one consistent API that maps internally to the native backend on each platform.
 
 ```c
 #include <xlib/thread.h>
 #include <stdio.h>
 
-int worker(void *data) {
-    printf("Hello from xlib thread!\n");
+static int worker(void *data) {
+    (void)data;
+    puts("hello from xlib");
     return 0;
 }
 
 int main(void) {
-    x_thread_t *thread;
+    x_thread_t *thread = NULL;
 
     if (x_thread_create(&thread, worker, NULL) != 0) {
         return 1;
@@ -179,457 +39,329 @@ int main(void) {
 
     x_thread_join(thread, NULL);
     x_thread_destroy(thread);
-
     return 0;
 }
 ```
 
 ---
 
-## Roadmap
-
-### v1.1 - Documentation and Packaging
-
-- [x] Full API reference
-- [x] More examples for each module
-- [x] Contribution guide
-- [x] Versioning and compatibility policy
-- [x] CMake package config files
-- [x] Install/export validation
-- [x] Package manager integration planning
-
-### v1.2 - CI and Platform Hardening
-
-- [x] CI for Linux, Windows, and macOS
-- [x] Compiler matrix for GCC, Clang, MSVC, and MinGW
-- [x] Sanitizer builds where supported
-- [x] Cross-platform test coverage expansion
-- [x] POSIX backend validation on Linux and macOS
-- [x] Windows API edge-case hardening
-
-### v1.3 - Event System Expansion
-
-- [x] Stable timer and socket event-source abstractions
-- [x] Event-loop wake APIs
-- [x] Event-loop cancellation APIs
-- [x] Repeating timer drift correction
-- [x] Timer precision and drift smoke tests
-- [x] Backend-specific CI event smoke tests
-
-### v1.4 - Filesystem and Process Extensions
-
-- [x] File event sources
-- [x] Process event sources
-- [x] File watcher API
-- [x] Async filesystem operations
-- [x] Advanced process pipelines
-- [x] Pipe handle support
-- [x] Environment block support for child processes
-- [x] Cross-platform terminal/TTY utilities
-
-### v1.5 - IPC and Memory Extensions
-
-- [x] Shared memory primitives
-- [x] Inter-process synchronization
-- [x] Named mutexes or semaphores
-- [x] Memory allocation hooks
-- [x] Pluggable allocator support
-- [x] More memory mapping modes
-
-### v1.6 - Networking Extensions
-
-- [x] Expanded IPv6 support
-- [x] TLS socket integration hooks
-- [x] Socket timeout helpers
-- [x] Multicast helpers
-- [x] Better address formatting and parsing
-- [x] UDP convenience APIs
-
-### v1.7 - C++ API Growth
-
-- [x] More complete C++20 wrappers
-- [x] RAII process wrapper
-- [x] RAII event-loop wrapper
-- [x] RAII memory mapping wrapper
-- [x] C++ iterator support for directories
-- [x] `std::chrono` integration
-
-### v1.8 - Diagnostics and Observability
-
-- [x] Structured logging hooks
-- [x] Error category support for C++
-- [x] Runtime diagnostics callbacks
-- [x] Optional tracing hooks
-- [x] Debug assertions for invalid API usage
-
-### v1.9 - ABI and Release Hardening
-
-- [x] ABI compatibility policy and tooling
-- [x] Symbol visibility controls
-- [x] Public header audit
-- [x] Long-running stress tests
-- [x] Release checklist automation
-- [x] Extended platform support evaluation
-
-### v2.0 - Networking API Unification
-
-- [x] Dual-stack IPv6 socket factories where supported
-- [x] Unified address alias (`x_address_t`) over IPv4 and IPv6 storage
-- [x] Hostname resolution returning multiple results
-- [x] Peer address retrieval on accepted/connected sockets
-- [x] Socket `shutdown()` support (read, write, both)
-- [x] Platform-consistent would-block checks
-- [x] Network interface enumeration API
-
-### v2.1 - Complete C++ Wrapper Surface
-
-- [x] `xlib::process` RAII wrapper with wait/terminate/exit-code
-- [x] `xlib::event_loop` RAII wrapper
-- [x] `xlib::mapped_file` RAII wrapper
-- [x] `xlib::directory` / `xlib::directory_iterator` (range-for compatible)
-- [x] `xlib::condition` RAII wrapper
-- [x] `xlib::semaphore` RAII wrapper
-- [x] `xlib::tls_key<T>` typed thread-local storage wrapper
-- [x] `std::chrono` integration for all time and sleep APIs
-- [x] C++17 `[[nodiscard]]` annotations on value-returning wrappers
-- [x] C++ wrappers for v2.0 networking additions
-- [x] C++ wrappers for process pipes, polling, timers, and file watchers
-
-### v2.2 - Async I/O Foundation
-
-- [x] Non-blocking file read/write event sources for the event loop
-- [x] Native non-polling process exit backends where available
-- [x] Native filesystem change watcher backends where available
-- [x] Signal event sources on POSIX (`signalfd` / `kqueue EVFILT_SIGNAL`)
-- [x] Pipe read/write event sources
-- [x] Child process stdout/stderr streaming via event loop
-- [x] Unified `x_event_source` subtype for all new sources
-
-### v2.3 - IPC and Shared Memory
-
-- [x] Named shared memory segments
-- [x] Named mutexes and semaphores (cross-process synchronization)
-- [x] Cross-platform UNIX domain / named pipe support
-- [x] Inter-process message queue primitives
-- [x] Shared memory with configurable protection flags
-- [x] Memory-mapped file resize API
-
-### v2.4 - TLS and Secure Networking
-
-- [x] TLS stream wrapper over `x_socket_t` (pluggable backend)
-- [x] Certificate and key loading helpers
-- [x] Hostname verification support
-- [x] Non-blocking TLS handshake integration with event loop
-- [x] Optional bundled backend detection API (returns unavailable unless compiled in)
-- [x] SNI support
-
-### v2.5 - Advanced Threading
-
-- [x] Read-write lock (`x_rwlock_t`) API
-- [x] Barrier synchronization primitive
-- [x] Thread pool with configurable worker count
-- [x] Thread affinity / CPU pinning helpers
-- [x] `once` primitive (`x_once_t`) for one-time initialization
-- [x] Per-thread stack size configuration in `x_thread_create`
-
-### v2.6 - Pluggable Allocator and Memory Diagnostics
-
-- [ ] Global pluggable allocator (`x_allocator_t` vtable)
-- [ ] Per-arena allocation scopes
-- [ ] Allocation tracking and high-watermark reporting
-- [ ] Guard-page allocator option for debugging
-- [ ] Stack allocator primitive for temporary allocations
-- [ ] Integration with sanitizer allocators in debug builds
-
-### v2.7 - Observability and Structured Diagnostics
-
-- [ ] Structured error type carrying operation name, code, and context
-- [ ] C++ `std::error_category` subclass for all xlib error codes
-- [ ] Optional callback-based logging sink (`x_log_hook_t`)
-- [ ] Per-module log verbosity control
-- [ ] Debug-build API misuse assertions (double-free, use-after-free guards)
-- [ ] Compile-time feature detection macros (`XLIB_HAS_EPOLL` etc.)
-- [ ] Optional perf-counter hooks for profiling integrations
-
-### v2.8 - Security and Hardening
-
-- [ ] Mandatory `O_CLOEXEC` / `SOCK_CLOEXEC` enforcement audit (all platforms)
-- [ ] Privilege-drop helper (`setuid`/`setgid` wrappers)
-- [ ] Secure memory zeroing (`x_memory_secure_zero`) resistant to optimisation
-- [ ] `MAP_ANONYMOUS` guard pages around sensitive allocations
-- [ ] Capability-based fd passing (`SCM_RIGHTS`) on POSIX
-- [ ] Stack-smashing / buffer overflow hardening in all path utilities
-- [ ] Fuzz-testing harnesses for filesystem, network, and process APIs
-
-### v2.9 - Stable ABI and Long-Term Support
-
-- [ ] Frozen, versioned ABI with compatibility guarantees across minor versions
-- [ ] `XLIB_API` visibility macros applied to every public symbol
-- [ ] Static and shared library both fully validated
-- [ ] Symbol versioning scripts (`.map` / `.def`) for all platforms
-- [ ] Stable C ABI test suite (binary compatibility regression tests)
-- [ ] Official package manager presence (vcpkg, Conan, Homebrew)
-- [ ] Long-term support commitment and security patch policy
-- [ ] Complete API reference generated from source (Doxygen / Sphinx)
-- [ ] Migration guide from v1.x to v3.0
-
-
-## v3.0 - Stable Platform Layer Release
-
-- [ ] Official stable C ABI baseline
-- [ ] Finalized v3 public API surface
-- [ ] Removal or deprecation of legacy v1/v2 transitional APIs
-- [ ] Complete migration guide from v2.x to v3.0
-- [ ] Strict semantic versioning policy enforcement
-- [ ] ABI compatibility regression suite enabled in CI
-- [ ] Full Linux, macOS, Windows release validation
-- [ ] Official source and binary release artifacts
-- [ ] Package manager publishing: vcpkg, Conan, Homebrew
-- [ ] Long-term support branch created for v3.x
-
-## v3.1 - Platform and Hardware Introspection
-
-- [ ] OS detection API
-- [ ] OS version detection API
-- [ ] CPU architecture detection
-- [ ] CPU feature detection: SSE, AVX, NEON, etc.
-- [ ] CPU core and hardware thread count API
-- [ ] Cache line size detection
-- [ ] Endianness detection
-- [ ] Page size and allocation granularity API refinement
-- [ ] Runtime feature query API: `x_feature_available`
-- [ ] Compile-time feature macros: `XLIB_PLATFORM_WINDOWS`, `XLIB_ARCH_X64`, etc.
-
-## v3.2 - Atomics and Lock-Free Primitives
-
-- [ ] Portable atomic integer API
-- [ ] Portable atomic pointer API
-- [ ] Memory-order abstraction
-- [ ] Spinlock primitive
-- [ ] Once-cell / lazy initialization helper
-- [ ] Single-producer single-consumer queue
-- [ ] Multi-producer single-consumer queue
-- [ ] Atomic reference counter primitive
-- [ ] Lock-free ring buffer
-- [ ] C++ wrappers around atomic and lock-free primitives
-
-
-## v3.3 - Advanced Filesystem Layer
-
-- [ ] Path normalization API
-- [ ] Canonical path resolution
-- [ ] Relative path computation
-- [ ] Parent path, extension, stem, and filename helpers
-- [ ] Symlink creation, reading, and resolution
-- [ ] Hard link support
-- [ ] File copy, move, and recursive remove helpers
-- [ ] Temporary file and temporary directory APIs
-- [ ] Atomic file replacement API
-- [ ] Filesystem permissions abstraction
-- [ ] Cross-platform file locking API
-
-
-## v3.4 - Native Async I/O Backends
-
-- [ ] Linux `io_uring` backend evaluation
-- [ ] Windows IOCP backend
-- [ ] macOS native async I/O backend evaluation
-- [ ] Async file read/write operations
-- [ ] Async socket operations
-- [ ] Async pipe operations
-- [ ] Async cancellation support
-- [ ] Async timeout support
-- [ ] Event loop integration for native async backends
-- [ ] Portable fallback backend
-
-
-## v3.5 - Runtime and Scheduler Layer
-
-- [ ] Generic task scheduler
-- [ ] Work-stealing thread pool
-- [ ] Future/promise-style task handles
-- [ ] Task cancellation tokens
-- [ ] Task priorities
-- [ ] Delayed task scheduling
-- [ ] Periodic task scheduling
-- [ ] Event-loop-backed task executor
-- [ ] Blocking and non-blocking task wait APIs
-- [ ] C++ task wrapper integration
-
-
-## v3.6 - Advanced Memory Management
-
-- [ ] Arena allocator
-- [ ] Pool allocator
-- [ ] Stack allocator
-- [ ] Slab allocator
-- [ ] Aligned allocation API
-- [ ] NUMA-aware allocation investigation
-- [ ] Allocation tagging
-- [ ] Memory usage snapshots
-- [ ] Leak reporting utilities
-- [ ] Debug allocator with red zones
-- [ ] Optional guard-page allocator integration
-
-
-## v3.7 - Binary Data and Serialization Primitives
-
-- [ ] Byte buffer API
-- [ ] Dynamic buffer API
-- [ ] Binary reader/writer helpers
-- [ ] Endian-aware integer encoding and decoding
-- [ ] Varint encoding helpers
-- [ ] Length-prefixed message framing
-- [ ] Checksum helpers
-- [ ] Stream abstraction over files, sockets, memory, and pipes
-- [ ] Zero-copy buffer slices
-- [ ] C++ span/string-view integration where available
-
-## v3.8 - System Service and Daemon Support
-
-- [ ] POSIX daemonization helper
-- [ ] Windows service wrapper
-- [ ] Service install/uninstall helpers on Windows
-- [ ] Service start/stop/status helpers
-- [ ] Signal handling integration for services
-- [ ] Graceful shutdown coordination
-- [ ] PID file helper on POSIX
-- [ ] Logging integration for services
-- [ ] Crash restart policy helpers
-- [ ] Process supervision example application
-
-## v3.9 - Production Hardening and Certification
-
-- [ ] Extended fuzz-testing suite
-- [ ] Long-running networking stress tests
-- [ ] Long-running filesystem stress tests
-- [ ] Long-running process and IPC stress tests
-- [ ] Thread sanitizer test profile
-- [ ] Address sanitizer test profile
-- [ ] Undefined behavior sanitizer test profile
-- [ ] Static analysis integration
-- [ ] Public security policy
-- [ ] CVE/reporting process
-- [ ] Reproducible builds investigation
-- [ ] Signed release artifacts
+## Why xlib?
+
+Portable systems programming in C and C++ is still painful.
+
+| Problem           | Linux / macOS       | Windows                               | xlib                  |
+| ----------------- | ------------------- | ------------------------------------- | --------------------- |
+| Threads           | `pthread`           | Win32 threads                         | `x_thread_*`          |
+| Dynamic libraries | `dlopen` / `dlsym`  | `LoadLibrary` / `GetProcAddress`      | `x_dynamic_library_*` |
+| Memory mapping    | `mmap`              | `CreateFileMapping` / `MapViewOfFile` | `x_mapped_file_*`     |
+| Virtual memory    | `mmap` / `mprotect` | `VirtualAlloc` / `VirtualProtect`     | `x_virtual_memory_*`  |
+| Sockets           | POSIX sockets       | Winsock                               | `x_socket_*`          |
+| Event polling     | `epoll` / `kqueue`  | Windows polling backend               | `x_event_loop_*`      |
+
+xlib focuses on being:
+
+* **Small** — useful primitives, not a giant framework.
+* **Portable** — Linux, Windows, and macOS are first-class targets.
+* **C-first** — easy to embed in C and C++ projects.
+* **C++ friendly** — optional header-only RAII wrappers.
+* **Build-system friendly** — CMake support, install rules, and package config files.
+* **Dependency-light** — native OS APIs where possible.
 
 ---
 
-## Supported Platforms
+## Current status
 
-Planned support:
+| Item                | Status                                     |
+| ------------------- | ------------------------------------------ |
+| Current version     | `2.5.0`                                    |
+| License             | MIT                                        |
+| Language            | C with optional C++ wrappers               |
+| Build system        | CMake                                      |
+| Supported platforms | Linux, Windows, macOS                      |
+| ABI stability       | Not guaranteed before the stable v3.x line |
+| Project status      | Active development                         |
 
-- Linux
-- Windows
-- macOS
-
-Future possible support:
-
-- FreeBSD
-- Android
-- iOS
-- WebAssembly
+> xlib is usable for experiments, tools, learning, and small systems projects. For large production systems, review the API surface, tests, and platform behavior before adopting it.
 
 ---
 
-## Build
+## Features
 
-xlib builds with CMake:
+### Core systems primitives
+
+* Thread creation, joining, sleeping, and destruction
+* Thread options, including custom stack size
+* Mutexes and recursive mutexes
+* Condition variables
+* Counting semaphores
+* Thread-local storage
+* Read-write locks
+* Barrier synchronization
+* One-time initialization with `x_once`
+* Thread pool with configurable worker count
+* Thread affinity helpers
+
+### Time
+
+* Monotonic clock
+* System clock
+* Millisecond and microsecond sleep helpers
+* High-resolution elapsed timers
+
+### Memory
+
+* Page size detection
+* Virtual memory allocation
+* Virtual memory protection changes
+* Read-only and read-write memory-mapped files
+* Mapped file resizing
+* Shared memory primitives
+* Allocation dispatch helpers
+
+### Filesystem
+
+* File open, read, write, seek, size, close, and remove
+* Directory creation, removal, opening, and iteration
+* Path helpers
+* UTF-8 public path handling on Windows
+* File watcher API
+* Async whole-file read helper
+
+### Dynamic libraries
+
+* Runtime library loading
+* Symbol lookup
+* Cross-platform error reporting
+
+### Networking
+
+* TCP and UDP sockets
+* IPv4 and IPv6 support
+* Dual-stack socket helpers
+* Address resolution
+* Multi-result hostname resolution
+* Address formatting and parsing
+* Peer and local address retrieval
+* Non-blocking sockets
+* Socket shutdown helpers
+* Socket options
+* Send and receive timeouts
+* Multicast helpers
+* Network interface enumeration
+* Platform-consistent would-block checks
+
+### TLS hooks
+
+* Pluggable TLS backend API
+* TLS stream wrapper over sockets
+* Certificate and private-key loading hooks
+* SNI and hostname verification helpers
+* Event-loop TLS handshake source
+
+> TLS support is designed as a pluggable integration layer. A real TLS backend must be provided or enabled for secure networking use.
+
+### Processes and IPC
+
+* Process creation
+* Waiting, polling, termination, and exit code retrieval
+* Standard input, output, and error redirection
+* Anonymous pipes
+* Child environment blocks
+* Environment variable helpers
+* Two-stage process pipeline helper
+* Named shared memory
+* Named semaphores
+* Named cross-process mutexes
+* Named byte-stream pipes
+* Fixed-size inter-process message queues
+
+### Event loop
+
+* Timer events
+* Socket readiness events
+* Process exit events
+* File watcher events
+* File read/write event sources
+* Pipe read/write event sources
+* POSIX signal event sources
+* TLS handshake event sources
+* Wake and cancellation APIs
+* Repeating timer drift correction
+* Linux `epoll` backend
+* macOS / BSD `kqueue` backend
+* Windows polling backend
+
+### C++ wrappers
+
+* Header-only RAII wrappers through `xlib/xlib.hpp`
+* Thread, mutex, condition, semaphore, and TLS wrappers
+* Timer wrappers with `std::chrono` support
+* Process wrapper
+* Event loop wrapper
+* Memory mapping wrapper
+* Directory range-for iterator
+* Networking wrappers
+* `[[nodiscard]]` annotations on value-returning methods
+* Error helpers based on `std::system_error`
+
+---
+
+## Installation
+
+### Requirements
+
+* CMake 3.16+
+* A C compiler
+* Optional: a C++ compiler for the C++ wrappers and examples
+
+### Build from source
 
 ```bash
+git clone https://github.com/anesr5/xlib.git
+cd xlib
+
+
 cmake -B build
 cmake --build build
+ctest --test-dir build --output-on-failure
 ```
 
-Common local configurations are also available through CMake presets:
+### Install
 
 ```bash
-cmake --preset dev
-cmake --build --preset dev
-ctest --preset dev
-```
-
-To install xlib and use it from another CMake project:
-
-```bash
-cmake -B build -DXLIB_BUILD_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX=/path/to/prefix
+cmake -B build -DXLIB_BUILD_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX=/your/install/prefix
 cmake --build build
 cmake --install build
 ```
 
+### Use from CMake
+
 ```cmake
 find_package(xlib CONFIG REQUIRED)
+
 target_link_libraries(your_target PRIVATE xlib::xlib)
 ```
 
-To run the example:
+### Use in C
 
-```bash
-./build/xlib_thread_example
-./build/xlib_threading_primitives_example
-./build/xlib_time_example
-./build/xlib_memory_example
-./build/xlib_filesystem_example
-./build/xlib_dynamic_library_example path/to/xlib_dynamic_library_plugin
-./build/xlib_network_example
-./build/xlib_tcp_server_example 8080
-./build/xlib_tcp_client_example 127.0.0.1 8080 "hello from xlib"
-./build/xlib_process_example ./build/xlib_process_helper
-./build/xlib_event_example
-./build/xlib_filesystem_process_extensions_example ./build/xlib_process_helper
-./build/xlib_cpp_wrapper_example path/to/xlib_dynamic_library_plugin
-./build/xlib_diagnostics_example
-./build/xlib_stress_test
+```c
+#include <xlib/xlib.h>
+```
+
+### Use in C++
+
+```cpp
+#include <xlib/xlib.hpp>
 ```
 
 ---
 
-## Design Philosophy
+## CMake presets
 
-xlib is not intended to wrap every operating system feature.
+For local development:
 
-Instead, it focuses on a small set of useful low-level primitives that can be implemented cleanly across platforms.
+```bash
+cmake --preset dev
+cmake --build --preset dev
+ctest --preset dev --output-on-failure
+```
 
-The library should remain:
+For sanitizer builds on supported GCC/Clang platforms:
 
-- Small
-- Fast
-- Predictable
-- Easy to read
-- Easy to modify
-- Easy to embed
+```bash
+cmake --preset sanitizers
+cmake --build --preset sanitizers
+ctest --preset sanitizers --output-on-failure
+```
 
 ---
 
-## C and C++ Support
+## Examples
 
-The core API is written in C for maximum compatibility.
+The `examples/` directory contains focused examples for the public modules.
 
-C++ projects can include `xlib/xlib.hpp` for header-only RAII wrappers and exception-based error handling.
+| Example                          | What it shows                                        |
+| -------------------------------- | ---------------------------------------------------- |
+| `thread_example.c`               | Basic thread creation and joining                    |
+| `threading_primitives_example.c` | Mutexes, conditions, semaphores, TLS, worker threads |
+| `time_example.c`                 | Clocks, timers, and sleep helpers                    |
+| `memory_example.c`               | Virtual memory, protection flags, mapped files       |
+| `filesystem_example.c`           | File I/O, directories, paths, UTF-8 filenames        |
+| `dynamic_library_example.c`      | Loading a plugin and resolving symbols               |
+| `network_example.c`              | Loopback TCP and UDP checks                          |
+| `tcp_server_example.c`           | Minimal TCP echo server                              |
+| `tcp_client_example.c`           | Minimal TCP client                                   |
+| `process_example.c`              | Process creation, stdio redirection, exit codes      |
+| `event_example.c`                | Timers and socket readiness in an event loop         |
+| `ipc_example.c`                  | Shared memory, named semaphores, mapped files        |
+| `diagnostics_example.c`          | Logging, diagnostics, tracing, assertions            |
+| `cpp_wrapper_example.cpp`        | C++ RAII wrappers                                    |
+
+Run most examples through CTest:
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
+Run the TCP examples manually:
+
+```bash
+./build/xlib_tcp_server_example 8080
+./build/xlib_tcp_client_example 127.0.0.1 8080 "hello from xlib"
+```
 
 ---
 
 ## Documentation
 
-- [API Reference](docs/API.md)
-- [Event System](docs/EVENTS.md)
-- [Examples Guide](docs/EXAMPLES.md)
-- [CI and Platform Validation](docs/CI.md)
+* [API Reference](docs/API.md)
+* [Event System](docs/EVENTS.md)
+* [Examples Guide](docs/EXAMPLES.md)
+* [CI and Platform Validation](docs/CI.md)
 
 ---
 
-## Contributing
+## When should you use xlib?
 
-Contributions are welcome once the base structure is ready.
+xlib is a good fit for:
 
-Useful contributions may include:
+* cross-platform command-line tools
+* systems utilities
+* small servers and agents
+* runtime prototypes
+* game engine tooling
+* educational systems programming projects
+* C/C++ projects that want portable OS primitives without adopting a large framework
 
-- Platform-specific implementations
-- Tests
-- Documentation
-- Examples
-- Bug fixes
-- API design improvements
+xlib may not be the best fit if you need:
+
+* a fully mature production async runtime
+* a high-level networking framework
+* a guaranteed stable ABI today
+* a batteries-included TLS implementation without configuring a backend
+* a replacement for large frameworks such as Boost.Asio, libuv, APR, or GLib
+
+---
+
+## Roadmap
+
+### Near term
+
+* Improve release packaging
+* Publish tagged GitHub releases
+* Expand real-world examples
+* Improve documentation for each module
+* Add more platform edge-case tests
+
+### Later
+
+* Stable ABI policy for the v3.x line
+* Package manager support
+* Stronger fuzzing and stress testing
+* More complete native async I/O backends
+* Extended service / daemon support
+
+See the documentation directory for more detailed development notes.
 
 ---
 

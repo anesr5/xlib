@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(
     xlib
-    VERSION 2.1.0
+    VERSION 2.5.0
     DESCRIPTION "A lightweight cross-platform low-level systems library for C and C++"
     LANGUAGES C CXX
 )
